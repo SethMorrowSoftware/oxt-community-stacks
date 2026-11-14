@@ -1,0 +1,166 @@
+# Reads the stacks a pull request shares and says, on the pull request and
+# in plain words, whether they can be shared and what they use.
+#
+# HOW THIS IS KEPT SAFE. A pull request comes from anybody, and this
+# workflow may write a comment, so:
+#
+#   - It runs on pull_request_target: the workflow file and every tool it
+#     runs are the main branch's, never the pull request's. Nothing from
+#     the pull request is ever executed: not a script, not a hook, not a
+#     build step.
+#   - The pull request's files are fetched into a folder of their own as
+#     DATA, only the stacks/ folder, with symbolic links written out as
+#     plain text files.
+#   - A stack is read by OXT-Beyond's engine with every permission taken
+#     away, as the user "nobody", with no network and no way to become
+#     anyone else (tools/scan.py says how); reading a stack runs none of
+#     its handlers.
+#   - The job that reads has a read-only token. The job that comments has
+#     the right to comment and does nothing but post the report, a file
+#     that the reading job wrote with every outside word escaped.
+#
+# Do not add a step here that checks out the pull request's branch into
+# the workspace, or that runs anything from $RUNNER_TEMP/pr.
+name: Scan
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+    branches: [main]
+
+permissions: {}
+
+concurrency:
+  group: scan-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  scan:
+    name: Scan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Check out the tools (the main branch's, never the pull request's)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: List the files the pull request changes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/files?per_page=100" \
+            --jq '.[] | {filename, status, previous_filename}' | jq -s . > "$RUNNER_TEMP/changed.json"
+          echo "$(jq length "$RUNNER_TEMP/changed.json") changed file(s)"
+
+      - name: Get the pull request's stacks, as files to read
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR: ${{ github.event.pull_request.number }}
+          # (a stack is never a pointer to a file kept somewhere else)
+          GIT_LFS_SKIP_SMUDGE: '1'
+        run: |
+          set -euo pipefail
+          git init --quiet "$RUNNER_TEMP/pr"
+          cd "$RUNNER_TEMP/pr"
+          git config core.symlinks false
+          git config core.hooksPath /dev/null
+          git config core.autocrlf false
+          git remote add origin "https://github.com/$GITHUB_REPOSITORY"
+          git sparse-checkout set --no-cone '/stacks/'
+          # (only the files of stacks/ are downloaded)
+          git fetch --quiet --depth 1 --no-tags --filter=blob:none origin "refs/pull/$PR/head"
+          # (the pull request may have moved on since this run began; the
+          # newer push has a run of its own)
+          if [ "$(git rev-parse FETCH_HEAD)" != "$HEAD_SHA" ]; then
+            echo "::error::The pull request changed while it was being checked."
+            exit 1
+          fi
+          git checkout --quiet --detach FETCH_HEAD
+
+      - name: Fetch the engine (tools/pins.json)
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            libfreetype6 libfontconfig1 util-linux
+          # (in a folder everyone can read: the scanner starts the engine
+          # as the user "nobody")
+          sudo install -d -o "$(id -u)" -g "$(id -g)" -m 755 /opt/oxt
+          echo "OXT_ENGINE=$(python3 tools/fetch.py engine /opt/oxt)" >> "$GITHUB_ENV"
+
+      - name: Read the stacks
+        env:
+          COUNT: ${{ github.event.pull_request.changed_files }}
+        run: |
+          set -uo pipefail
+          mkdir -p "$RUNNER_TEMP/report"
+          python3 tools/pr_scan.py --changed "$RUNNER_TEMP/changed.json" --pr "$RUNNER_TEMP/pr" \
+            --markdown "$RUNNER_TEMP/report/report.md" --kind "$RUNNER_TEMP/report/kind" \
+            --count "$COUNT" --no-network
+          code=$?
+          if [ -f "$RUNNER_TEMP/report/report.md" ]; then
+            cat "$RUNNER_TEMP/report/report.md" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          exit "$code"
+
+      - name: Keep the report for the comment
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: scan-report
+          path: ${{ runner.temp }}/report/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  comment:
+    name: Tell the author
+    needs: scan
+    if: always() && needs.scan.result != 'cancelled' && needs.scan.result != 'skipped'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      pull-requests: write
+    steps:
+      # (no checkout: this job runs nothing but the lines below)
+      - name: Get the report
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: scan-report
+          path: ${{ runner.temp }}/report
+
+      - name: Post it on the pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          marker='<!-- oxt-community-stacks scan -->'
+          report="$RUNNER_TEMP/report/report.md"
+          kind=$(head -c 20 "$RUNNER_TEMP/report/kind" 2>/dev/null | tr -cd 'a-z' || true)
+          body="$RUNNER_TEMP/body.md"
+          if [ -s "$report" ] && [ -n "$kind" ]; then
+            head -c 64000 "$report" > "$body"
+          else
+            kind=error
+            printf '%s\n# The stack check\n\nThe check could not finish, so nothing was approved. An admin will look at [what happened](%s).\n' \
+              "$marker" "$RUN_URL" > "$body"
+          fi
+          # The one comment this workflow keeps on the pull request.
+          old=$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$PR/comments?per_page=100" \
+            --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | contains("<!-- oxt-community-stacks scan -->"))) | .id')
+          old=${old%%$'\n'*}
+          if [ -n "$old" ]; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$old" -F "body=@$body" --silent
+          elif [ "$kind" != none ]; then
+            # (a pull request with no stack in it gets no comment)
+            gh api -X POST "repos/$GITHUB_REPOSITORY/issues/$PR/comments" -F "body=@$body" --silent
+          fi

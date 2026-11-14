@@ -1,0 +1,194 @@
+# Builds the gallery from the stacks on the main branch and puts it on
+# the web (GitHub Pages).
+#
+# Four jobs, each with only what it needs:
+#
+#   build   reads every stack again with the scanner (whatever checked it
+#           before), builds the site and plays every stack in a browser.
+#           It holds no secret and may write nothing.
+#   sign    signs the list of stacks (index.json) for the IDE's gallery.
+#           It is the only job that sees the signing key; it starts from a
+#           fresh copy of the tools, reads no stack and runs no browser.
+#   deploy  hands the site to GitHub Pages.
+#   live    plays the stacks on the real web address, where the browser's
+#           rules are the ones visitors get.
+#
+# WHERE THE SITE MAY LIVE. Never on an address shared with something a
+# visitor is signed in to or keeps data in. Stacks are other people's
+# programs; each plays boxed in, and an address of the gallery's own is
+# the second wall behind that box. sethmorrowsoftware.github.io is the
+# address of OXT-Beyond's web IDE and its Stack Player, which keep
+# people's own stacks in the browser, so the deploy job does not run while
+# the repository belongs to that account. It runs once the repository is
+# in an organization of its own (see docs/MAINTAINING.md).
+name: Publish
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions: {}
+
+# One at a time, and never cancelled halfway: the newest run wins.
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+env:
+  PLAYWRIGHT_VERSION: 1.56.0
+
+jobs:
+  build:
+    name: Build the gallery
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Fetch the engine and the Stack Player (tools/pins.json)
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            libfreetype6 libfontconfig1 util-linux
+          # (in a folder everyone can read: the scanner starts the engine
+          # as the user "nobody")
+          sudo install -d -o "$(id -u)" -g "$(id -g)" -m 755 /opt/oxt
+          engine=$(python3 tools/fetch.py engine /opt/oxt)
+          player=$(python3 tools/fetch.py player /opt/oxt)
+          echo "OXT_ENGINE=$engine" >> "$GITHUB_ENV"
+          echo "OXT_PLAYER=$player" >> "$GITHUB_ENV"
+
+      - name: Build
+        run: |
+          # Not --strict: a stack the scanner refuses today (the rules
+          # may have grown since it was shared) is left out with a
+          # warning, and the rest of the gallery is still published.
+          python3 tools/build_site.py --player "$OXT_PLAYER" --out "$RUNNER_TEMP/site" --no-network
+
+      - name: Install the browser
+        run: |
+          set -euo pipefail
+          npm install --no-save --no-audit --no-fund --prefix "$RUNNER_TEMP/pw" "playwright@$PLAYWRIGHT_VERSION"
+          "$RUNNER_TEMP/pw/node_modules/.bin/playwright" install --with-deps chromium
+          echo "NODE_PATH=$RUNNER_TEMP/pw/node_modules" >> "$GITHUB_ENV"
+
+      - name: Play every stack in a browser
+        run: node tools/tests/browser-check.js "$RUNNER_TEMP/site"
+
+      - name: Pack the site
+        run: tar -C "$RUNNER_TEMP/site" -cf "$RUNNER_TEMP/site.tar" .
+
+      - name: Hand the site to the signing job
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: site-unsigned
+          path: ${{ runner.temp }}/site.tar
+          if-no-files-found: error
+          retention-days: 3
+
+  sign:
+    name: Sign the list of stacks
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Check out (the signing tool and the public key)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Get the site
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: site-unsigned
+          path: ${{ runner.temp }}/in
+
+      - name: Unpack it
+        run: |
+          set -euo pipefail
+          mkdir "$RUNNER_TEMP/site"
+          tar -C "$RUNNER_TEMP/site" --no-same-owner --no-same-permissions -xf "$RUNNER_TEMP/in/site.tar"
+          # (never a signature that this job did not make)
+          rm -f "$RUNNER_TEMP/site/index.sig"
+          test -f "$RUNNER_TEMP/site/index.json"
+
+      - name: Sign index.json
+        env:
+          STACKS_SIGNING_KEY: ${{ secrets.STACKS_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "$STACKS_SIGNING_KEY" ]; then
+            echo "::warning::index.json is NOT signed: the repository has no STACKS_SIGNING_KEY secret yet (docs/MAINTAINING.md). The web gallery works without it; the IDE's gallery will not believe an unsigned list."
+            exit 0
+          fi
+          python3 tools/sign.py sign "$RUNNER_TEMP/site/index.json" "$RUNNER_TEMP/site/index.sig"
+
+      - name: Check the signature with the public key
+        run: |
+          set -euo pipefail
+          if [ -f "$RUNNER_TEMP/site/index.sig" ]; then
+            python3 tools/sign.py verify "$RUNNER_TEMP/site/index.json" "$RUNNER_TEMP/site/index.sig"
+          fi
+
+      - name: Hand the site to GitHub Pages
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: ${{ runner.temp }}/site
+
+  deploy:
+    name: Put it on the web
+    needs: sign
+    # See "WHERE THE SITE MAY LIVE" at the top of this file.
+    if: github.repository_owner != 'SethMorrowSoftware'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    outputs:
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+
+  live:
+    name: Play the stacks on the real address
+    needs: deploy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install the browser
+        run: |
+          set -euo pipefail
+          npm install --no-save --no-audit --no-fund --prefix "$RUNNER_TEMP/pw" "playwright@$PLAYWRIGHT_VERSION"
+          "$RUNNER_TEMP/pw/node_modules/.bin/playwright" install --with-deps chromium
+          echo "NODE_PATH=$RUNNER_TEMP/pw/node_modules" >> "$GITHUB_ENV"
+
+      - name: Play
+        env:
+          SITE: ${{ needs.deploy.outputs.url }}
+        run: |
+          set -euo pipefail
+          # (Pages takes a moment to serve a new deploy everywhere)
+          sleep 30
+          node tools/tests/browser-check.js "$SITE"

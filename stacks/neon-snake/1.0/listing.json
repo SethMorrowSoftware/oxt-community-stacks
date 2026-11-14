@@ -1,0 +1,12 @@
+{
+  "title": "Neon Snake",
+  "author": "OXT-Beyond contributors",
+  "description": "The classic snake game on a timer loop. Steer with the arrow keys, or swipe on a phone, and see how long you can grow before you run into yourself.",
+  "licence": "GPL-3.0-only",
+  "main": "Neon Snake.oxtstack",
+  "screenshot": "screenshot.webp",
+  "tags": [
+    "game",
+    "keyboard"
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "title": "Beat Box",
+  "author": "OXT-Beyond contributors",
+  "description": "A drum machine with sixteen steps. Click the squares to lay down a beat, press play, and change the tempo while it runs. The drums are made by the browser as it plays.",
+  "licence": "GPL-3.0-only",
+  "main": "Beat Box.oxtstack",
+  "screenshot": "screenshot.webp",
+  "tags": [
+    "music",
+    "sound"
+  ]
+}

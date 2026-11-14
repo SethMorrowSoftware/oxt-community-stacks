@@ -1,0 +1,76 @@
+# Tests the repository's own tools on every pull request and every push:
+# the scanner against good and bad sample stacks (with OXT-Beyond's real
+# engine), the site builder, and in a real browser that a hostile stack
+# cannot leave its box. Then it builds the gallery from the stacks here
+# and plays each of them.
+#
+# This workflow runs the pull request's own copy of the tools, as any
+# test run does, so it is given nothing: a read-only token and no secret.
+# What a pull request's stacks may be is decided by scan.yml, which runs
+# the tools of the main branch instead.
+name: Checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: checks-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  # The Playwright that OXT-Beyond's own web checks use.
+  PLAYWRIGHT_VERSION: 1.56.0
+
+jobs:
+  checks:
+    name: Checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Fetch the engine and the Stack Player (tools/pins.json)
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            libfreetype6 libfontconfig1 util-linux
+          # (in a folder everyone can read: the scanner starts the engine
+          # as the user "nobody")
+          sudo install -d -o "$(id -u)" -g "$(id -g)" -m 755 /opt/oxt
+          engine=$(python3 tools/fetch.py engine /opt/oxt)
+          player=$(python3 tools/fetch.py player /opt/oxt)
+          echo "OXT_ENGINE=$engine" >> "$GITHUB_ENV"
+          echo "OXT_PLAYER=$player" >> "$GITHUB_ENV"
+
+      - name: Install the browser
+        run: |
+          set -euo pipefail
+          npm install --no-save --no-audit --no-fund --prefix "$RUNNER_TEMP/pw" "playwright@$PLAYWRIGHT_VERSION"
+          "$RUNNER_TEMP/pw/node_modules/.bin/playwright" install --with-deps chromium
+          echo "NODE_PATH=$RUNNER_TEMP/pw/node_modules" >> "$GITHUB_ENV"
+
+      - name: Test the tools
+        env:
+          # Here the engine and the browser must be there: a test that
+          # skips itself would pass having checked nothing.
+          OXT_REQUIRE_ENGINE: '1'
+          OXT_REQUIRE_BROWSER: '1'
+        run: python3 -m unittest discover -s tools/tests -v
+
+      - name: Build the gallery from the stacks here
+        run: |
+          python3 tools/build_site.py --player "$OXT_PLAYER" --out "$RUNNER_TEMP/site" \
+            --no-network --strict
+
+      - name: Play every stack in a browser
+        run: node tools/tests/browser-check.js "$RUNNER_TEMP/site"
