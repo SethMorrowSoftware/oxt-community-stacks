@@ -7,7 +7,8 @@ up once.
 ## The path of a stack
 
 1. Somebody opens a pull request that adds `stacks/<name>/<version>/`.
-   (A stack posted on the forum is put into a pull request by an admin.)
+   (A stack posted on the forum is put into a pull request by an admin:
+   see "A stack that came as a package" below.)
 2. **Scan** (`.github/workflows/scan.yml`) reads it and comments on the
    pull request: it can be shared, with its labels, or what stands in
    the way. **Checks** builds the gallery with it and plays it in a
@@ -20,6 +21,28 @@ up once.
 Nothing in a pull request is ever run by Scan: it uses the tools of the
 main branch and treats the pull request's files as data. The top of
 `scan.yml` says how, and what never to add to it.
+
+## A stack that came as a package
+
+Many authors do not use GitHub. OXT-Beyond's File > Share Stack... packs
+a stack, its listing and a screenshot into one `.zip`, and the author
+posts it on the forum. To bring it in:
+
+```sh
+python3 tools/accept.py ~/Downloads/beat-box-1.0.zip
+```
+
+The tool believes nothing in the package: every path must stay inside
+one `stacks/<name>/<version>/` folder, links are refused, and it never
+unpacks more than a stack may hold, whatever sizes the `.zip` claims.
+The unpacked stack goes through the same checker as a pull request's.
+Only when it can be shared is the folder put into `stacks/`, and the
+report is printed either way, to pass on to the author. Then open a pull
+request with the new folder, as in step 1, and review it as any other.
+
+Never unpack a package by hand into the repository, and never open a
+stack from one in the IDE to "have a look": read it on the pull request,
+where the checker lists what it does.
 
 ## Reviewing a stack
 
