@@ -117,6 +117,9 @@ here. A stack that turns out to be a problem is taken down.
 
 - `tools/scan.py` checks one stack folder; `tools/lcscan.py` holds the
   rules for scripts and `tools/listing.py` the rules for `listing.json`.
+- `tools/accept.py` takes a stack that came as a package (from
+  OXT-Beyond's File > Share Stack...) into `stacks/`, if it can be
+  shared.
 - `tools/build_site.py` builds the gallery; `tools/sign.py` signs its
   list of stacks for the IDE.
 - `tools/tests/` tests all of it, with OXT-Beyond's real engine and a
