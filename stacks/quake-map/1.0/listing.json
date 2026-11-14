@@ -1,0 +1,13 @@
+{
+  "title": "Quake Map",
+  "author": "OXT-Beyond contributors",
+  "description": "The world's recent earthquakes, live from the United States Geological Survey, drawn on a map you can explore.",
+  "licence": "GPL-3.0-only",
+  "main": "Quake Map.oxtstack",
+  "screenshot": "screenshot.webp",
+  "tags": [
+    "internet",
+    "live data",
+    "map"
+  ]
+}

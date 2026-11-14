@@ -1,0 +1,12 @@
+{
+  "title": "QR Studio",
+  "author": "OXT-Beyond contributors",
+  "description": "Type a link, a Wi-Fi network or a contact and get a QR code your phone can scan, then download it as a PNG.",
+  "licence": "GPL-3.0-only",
+  "main": "QR Studio.oxtstack",
+  "screenshot": "screenshot.webp",
+  "tags": [
+    "qr code",
+    "tool"
+  ]
+}

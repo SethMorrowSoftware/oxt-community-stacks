@@ -1,0 +1,12 @@
+{
+  "title": "Kanban Board",
+  "author": "OXT-Beyond contributors",
+  "description": "Drag cards between three columns while the others slide out of the way. Add, tag, edit and bin them.",
+  "licence": "GPL-3.0-only",
+  "main": "Kanban Board.oxtstack",
+  "screenshot": "screenshot.webp",
+  "tags": [
+    "animation",
+    "drag and drop"
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "title": "Fireworks",
+  "author": "OXT-Beyond contributors",
+  "description": "Click anywhere to send up a rocket and watch it burst. A small show of what a timer loop and a few graphics can do.",
+  "licence": "GPL-3.0-only",
+  "main": "Fireworks.oxtstack",
+  "screenshot": "screenshot.webp",
+  "tags": [
+    "animation",
+    "toy"
+  ]
+}
