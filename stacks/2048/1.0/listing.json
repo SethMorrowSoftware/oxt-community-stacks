@@ -1,0 +1,13 @@
+{
+  "title": "2048",
+  "author": "OXT-Beyond contributors",
+  "description": "Slide the tiles and join the ones that match until you reach 2048. Moves are animated and there is an undo for the slip of a finger.",
+  "licence": "GPL-3.0-only",
+  "main": "2048.oxtstack",
+  "screenshot": "screenshot.webp",
+  "tags": [
+    "animation",
+    "game",
+    "puzzle"
+  ]
+}

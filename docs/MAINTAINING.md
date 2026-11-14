@@ -1,0 +1,132 @@
+# Looking after the community stacks
+
+For the admin: how a shared stack gets from a pull request to the
+gallery, what to look at before merging, and the few things that are set
+up once.
+
+## The path of a stack
+
+1. Somebody opens a pull request that adds `stacks/<name>/<version>/`.
+   (A stack posted on the forum is put into a pull request by an admin.)
+2. **Scan** (`.github/workflows/scan.yml`) reads it and comments on the
+   pull request: it can be shared, with its labels, or what stands in
+   the way. **Checks** builds the gallery with it and plays it in a
+   browser.
+3. An admin reviews it (below) and merges.
+4. **Publish** (`.github/workflows/publish.yml`) reads every stack
+   again, builds the site, signs the list of stacks and puts it on the
+   web.
+
+Nothing in a pull request is ever run by Scan: it uses the tools of the
+main branch and treats the pull request's files as data. The top of
+`scan.yml` says how, and what never to add to it.
+
+## Reviewing a stack
+
+The checker has already refused passwords, native code, other programs
+and stacks that cannot play on the web. What it cannot judge is intent.
+Before merging:
+
+- **Read the checker's comment.** "The lines these come from" lists
+  every line that uses the internet, files or JavaScript. See where the
+  stack sends things and whether that fits what it says it does.
+- **Read the notes.** `do`, `send`, `value` and `set the script` build
+  script while the stack runs, which the checker cannot follow. They are
+  ordinary in honest stacks; look at what is built.
+- **Play it** in OXT-Beyond's Stack Player (download the stack from the
+  pull request and drop it on the player's page). Does it do what the
+  description says? Does it ask for a password, an email
+  address or money, or pretend to be something else (a sign-in page, a
+  system message)? Refuse those.
+- **Look at the listing**: a real description, a licence the author can
+  give, a screenshot of the stack and not of something else.
+- **A new version of a stack that is already here** must come from the
+  same author. The checker's comment says when this is the case.
+- Only merge when both **Scan** and **Checks** are green.
+
+To take a stack down, remove its folder in a pull request (or straight
+on main) and Publish rebuilds the gallery without it.
+
+## Where the gallery may live
+
+Never on an address shared with something a visitor is signed in to, or
+that keeps their data. Each stack plays boxed in, and an address of the
+gallery's own is the second wall behind that box.
+
+- Not on `openxtalk.org` or a subdomain of it: a subdomain shares the
+  site's cookies.
+- Not on `sethmorrowsoftware.github.io`: that is the address of
+  OXT-Beyond's web IDE and its Stack Player, which keep people's own
+  stacks in the browser. The deploy job of `publish.yml` does not run
+  while the repository belongs to that account.
+- **On a free GitHub organization of its own**, whose `github.io`
+  address holds nothing else.
+
+Setting that up, once:
+
+1. Create a free organization on GitHub.
+2. Transfer this repository to it (Settings > General > Transfer).
+3. In the repository, Settings > Pages > Source: **GitHub Actions**.
+4. Run the Publish workflow (Actions > Publish > Run workflow), or merge
+   anything. Its last job plays every stack on the real address.
+
+Keep the organization for the gallery alone. Any other site published
+from it would share the gallery's address.
+
+## The signing key
+
+The IDE's gallery (in OXT-Beyond) reads the list of stacks,
+`index.json`, from the web site, and believes it only when its
+signature, `index.sig`, is good. The key that signs is made once:
+
+```sh
+python3 tools/sign.py new-key --secret-out ~/stacks-signing.secret
+```
+
+- The secret half goes into the file you name and is never shown. Open
+  the file, copy its one line into the repository's secret
+  `STACKS_SIGNING_KEY` (Settings > Secrets and variables > Actions > New
+  repository secret), then delete the file, or keep it somewhere safe
+  and offline.
+- The public half is written to `signing-key.pub`. Commit that file.
+  OXT-Beyond carries the same line, so that the IDE can check the
+  signature.
+
+Only the `sign` job of `publish.yml` sees the secret. It starts from a
+fresh copy of the tools, reads no stack and runs no browser.
+
+Until the secret is there, Publish says so in a warning and publishes
+the site unsigned. The web gallery works either way.
+
+If the secret is ever exposed: make a new key the same way, replace the
+secret and `signing-key.pub`, and ship the new public key in OXT-Beyond.
+
+## Settings worth having
+
+- Branch protection on `main`: require a pull request, and require the
+  checks **Scan** and **Checks** to pass.
+- Actions > General > "Require approval for first-time contributors":
+  leave it on. (Scan runs without it by design; Checks, which runs the
+  pull request's own code, waits for it.)
+
+## Moving to a newer OXT-Beyond
+
+`tools/pins.json` names the release whose engine reads the stacks and
+whose Stack Player plays them, with the SHA-256 of each download. To
+move: change the tag, the two asset names and the two digests (the
+release's `SHA256SUMS` has them) in a pull request of its own. Checks
+then runs every test, and plays every stack, with the new release.
+
+## The list of xTalk Suite handlers
+
+`tools/suite-handlers.json` tells the checker which handlers belong to
+which xTalk Suite library, so that it can label the ones that use the
+internet and refuse the ones with no web version. It is made from a
+checkout of the suite:
+
+```sh
+python3 tools/make_suite_handlers.py <path to xtalk-suite>
+```
+
+Run it again when a library gains handlers or the web engine gains a
+library.

@@ -1,0 +1,13 @@
+{
+  "title": "Wobble Forts",
+  "author": "OXT-Beyond contributors",
+  "description": "A physics game: pull back and fling the round Bloops at the Grumps' wobbly forts of wood, glass, stone, metal and TNT. Fifteen forts in three lands, with stars to earn. Made for a phone, and it plays with a mouse too.",
+  "licence": "GPL-3.0-only",
+  "main": "Wobble Forts.oxtstack",
+  "screenshot": "screenshot.webp",
+  "tags": [
+    "game",
+    "phone",
+    "physics"
+  ]
+}

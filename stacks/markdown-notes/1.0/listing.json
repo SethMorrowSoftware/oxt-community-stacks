@@ -1,0 +1,12 @@
+{
+  "title": "Markdown Notes",
+  "author": "OXT-Beyond contributors",
+  "description": "Write Markdown on the left and see it styled on the right as you type. Tick boxes in the preview, and download a note as Markdown or as a web page.",
+  "licence": "GPL-3.0-only",
+  "main": "Markdown Notes.oxtstack",
+  "screenshot": "screenshot.webp",
+  "tags": [
+    "text",
+    "writing"
+  ]
+}

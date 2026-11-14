@@ -1,0 +1,13 @@
+{
+  "title": "Live Weather",
+  "author": "OXT-Beyond contributors",
+  "description": "Today and the week ahead for any place you type, fetched from open-meteo.com and drawn as a chart.",
+  "licence": "GPL-3.0-only",
+  "main": "Live Weather.oxtstack",
+  "screenshot": "screenshot.webp",
+  "tags": [
+    "chart",
+    "internet",
+    "weather"
+  ]
+}
