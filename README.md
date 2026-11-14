@@ -36,9 +36,16 @@ You need your stack (an `.oxtstack`, `.livecode` or `.rev` file, with any
 pictures or sounds it loads from files beside it), a title, your name as
 you want it shown, a sentence or two about what it does, and a licence.
 
-**The easy way:** attach your stack to a post on the
+**The easy way:** in OXT-Beyond, open your stack and choose **File >
+Share Stack...** It asks for the title, your name, what the stack does
+and a licence, takes the picture, and puts one file on your Desktop.
+Attach that file to a post on the
 [OpenXTalk forum](https://openxtalk.org/forum/) and say you would like it
 in the community stacks. Somebody will do the rest.
+
+If your File menu has no Share Stack (it came after OXT-Beyond
+0.2.8-dp.1), attach the stack itself to your post, with its title, your
+name, what it does and the licence you choose.
 
 **With GitHub:** open a pull request that adds one folder and nothing
 else:
