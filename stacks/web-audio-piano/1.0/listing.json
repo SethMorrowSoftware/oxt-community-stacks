@@ -1,0 +1,12 @@
+{
+  "title": "Web Audio Piano",
+  "author": "OXT-Beyond contributors",
+  "description": "Two octaves of piano to play with the mouse or the keyboard. Each note is made by the browser, so there are no sound files to load.",
+  "licence": "GPL-3.0-only",
+  "main": "Web Audio Piano.oxtstack",
+  "screenshot": "screenshot.webp",
+  "tags": [
+    "music",
+    "sound"
+  ]
+}

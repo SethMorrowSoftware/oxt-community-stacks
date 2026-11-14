@@ -1,0 +1,12 @@
+{
+  "title": "Talking Robot",
+  "author": "OXT-Beyond contributors",
+  "description": "A robot that says what you type in the browser's own voices, lights up each word as it speaks, and watches your mouse.",
+  "licence": "GPL-3.0-only",
+  "main": "Talking Robot.oxtstack",
+  "screenshot": "screenshot.webp",
+  "tags": [
+    "speech",
+    "toy"
+  ]
+}
