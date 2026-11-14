@@ -237,6 +237,17 @@ class Site(unittest.TestCase):
         self.assertNotIn('@REPOSITORY@', self.read('share.html'))
         self.assertNotIn('@FORUM@', self.read('safety.html'))
 
+    def test_the_share_page_names_every_way_to_send_a_stack(self):
+        share = self.read('share.html')
+        self.assertNotIn('@FORUM@', share)
+        # the IDE's own way first (it makes the package tools/accept.py
+        # takes), then the forum alone, then a pull request
+        ways = [share.index(words) for words in
+                ('File &gt; Share Stack...', 'If your File menu has no Share Stack', 'If you use GitHub')]
+        self.assertEqual(ways, sorted(ways))
+        self.assertEqual(share.count('href="%s"' % build_site.FORUM_URL), 2)
+        self.assertNotIn('on its way', share)
+
     def test_every_link_of_the_site_leads_somewhere(self):
         files = set(self.all_files())
         for path in files:
