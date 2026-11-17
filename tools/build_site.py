@@ -160,9 +160,17 @@ def collect(stacks_dir, engine, no_network=False, log=print):
 
 # ---------------------------------------------------------------- pages
 
-def page(title, body, root='', description=''):
+NAV = [('index.html', 'All stacks'), ('safety.html', 'Is it safe?'), ('share.html', 'Share a stack')]
+
+
+def page(title, body, root='', description='', here=None):
     """One whole HTML page. `root` is the way from the page to the top
-    of the site ('' or '../../')."""
+    of the site ('' or '../../'); `here` is the NAV page it is, if any,
+    which the menu marks for the eye and for screen readers."""
+    nav = '\n    '.join(
+        '<a href="%s%s"%s%s>%s</a>' % (root, target, ' class="cta"' if target == 'share.html' else '',
+                                     ' aria-current="page"' if target == here else '', words)
+        for target, words in NAV)
     return '''<!doctype html>
 <html lang="en">
 <head>
@@ -174,15 +182,14 @@ def page(title, body, root='', description=''):
 <link rel="icon" type="image/svg+xml" href="%(root)sassets/mark.svg">
 </head>
 <body>
+<a class="skip" href="#main">Skip to the content</a>
 <header class="top">
   <a class="brand" href="%(root)sindex.html"><img src="%(root)sassets/mark.svg" alt="" width="36" height="36"><span>OXT Community Stacks</span></a>
-  <nav>
-    <a href="%(root)sindex.html">All stacks</a>
-    <a href="%(root)sshare.html">Share a stack</a>
-    <a href="%(root)ssafety.html">Is it safe?</a>
+  <nav aria-label="Site">
+    %(nav)s
   </nav>
 </header>
-<main>
+<main id="main" tabindex="-1">
 %(body)s
 </main>
 <footer>
@@ -190,7 +197,7 @@ def page(title, body, root='', description=''):
 </footer>
 </body>
 </html>
-''' % {'title': esc(title), 'body': body, 'root': root, 'oxt': OXT_URL,
+''' % {'title': esc(title), 'body': body, 'root': root, 'oxt': OXT_URL, 'nav': nav,
        'description': '<meta name="description" content="%s">\n' % esc(description) if description else ''}
 
 
@@ -201,57 +208,143 @@ def badges_html(uses):
         '<li class="badge">%s</li>' % esc(words) for key, words, _ in BADGES if key in uses)
 
 
-def screenshot_html(record, root, cls='shot'):
+def screenshot_html(record, root, cls='shot', alt=''):
     if record.get('screenshot_url'):
-        return '<img class="%s" src="%s%s" alt="" loading="lazy">' % (cls, root, url(record['screenshot_url']))
-    return '<div class="%s none" aria-hidden="true"></div>' % cls
+        return '<img class="%s" src="%s%s" alt="%s" loading="lazy">' % (cls, root, url(record['screenshot_url']),
+                                                                        esc(alt))
+    return '<div class="%s none" aria-hidden="true"><span>%s</span></div>' % (cls, esc(record['title'][:1].upper()))
+
+
+def tag_url(root, tag):
+    """The gallery, showing only the stacks with this tag."""
+    return '%sindex.html?tag=%s' % (root, urllib.parse.quote(tag, safe=''))
+
+
+def tags_html(root, tags):
+    return '<ul class="tags">%s</ul>' % ''.join(
+        '<li><a href="%s">%s</a></li>' % (esc(tag_url(root, t)), esc(t)) for t in tags)
+
+
+def card_html(e, root=''):
+    """A stack's card, as the gallery and "More stacks" show it."""
+    page_url = '%ss/%s/index.html' % (root, e['slug'])
+    return '''<li class="card" data-find="%(find)s" data-tags="%(tags)s">
+  <a class="shotlink" href="%(page)s" tabindex="-1" aria-hidden="true">%(shot)s</a>
+  <div class="body">
+    <h3><a href="%(page)s">%(title)s</a></h3>
+    <p class="by">by %(author)s</p>
+    <p class="what">%(description)s</p>
+    %(badges)s
+  </div>
+  <a class="play" href="%(root)ss/%(slug)s/play.html"><span aria-hidden="true">&#9654;</span> Play<span class="sr"> %(title)s</span></a>
+</li>''' % {'slug': e['slug'], 'page': page_url, 'root': root, 'title': esc(e['title']),
+            'author': esc(e['author']), 'description': esc(first_sentence(e['description'])),
+            'badges': badges_html(e['uses']), 'shot': screenshot_html(e, root),
+            'tags': esc('|'.join(e['tags'])),
+            'find': esc(' '.join([e['title'], e['author'], e['description']] + e['tags']).lower())}
+
+
+def common_tags(entries, least=2, most=8):
+    """The tags worth a button on the gallery: those of at least `least`
+    stacks, the most used first."""
+    counts = {}
+    for e in entries:
+        for t in e['tags']:
+            counts[t] = counts.get(t, 0) + 1
+    ranked = sorted((t for t in counts if counts[t] >= least), key=lambda t: (-counts[t], t))
+    return [(t, counts[t]) for t in ranked[:most]]
 
 
 def gallery_page(entries):
     if not entries:
         body = '''<section class="hero"><h1>Stacks to play, made by people like you</h1>
 <p>Nothing has been shared yet. <a href="share.html">Be the first to share a stack.</a></p></section>'''
-        return page('OXT Community Stacks', body)
-    cards = []
-    for e in entries:
-        cards.append('''<li class="card" data-find="%(find)s">
-  <a class="shotlink" href="s/%(slug)s/index.html" tabindex="-1" aria-hidden="true">%(shot)s</a>
-  <h2><a href="s/%(slug)s/index.html">%(title)s</a></h2>
-  <p class="by">by %(author)s</p>
-  <p class="what">%(description)s</p>
-  %(badges)s
-  <a class="play" href="s/%(slug)s/play.html">Play<span class="sr"> %(title)s</span></a>
-</li>''' % {'slug': e['slug'], 'title': esc(e['title']), 'author': esc(e['author']),
-            'description': esc(first_sentence(e['description'])), 'badges': badges_html(e['uses']),
-            'shot': screenshot_html(e, ''),
-            'find': esc(' '.join([e['title'], e['author'], e['description']] + e['tags']).lower())})
+        return page('OXT Community Stacks', body, here='index.html')
+    chips = ''.join('<button type="button" class="chip" data-tag="%s" aria-pressed="false">%s <span class="n">%d</span></button>'
+                    % (esc(t), esc(t), n) for t, n in common_tags(entries))
     body = '''<section class="hero">
   <h1>Stacks to play, made by people like you</h1>
   <p>Press <b>Play</b> and a stack opens right here in your browser. There is nothing to install, and a stack cannot reach your files or your computer. <a href="safety.html">How that works.</a></p>
-  <label class="find"><span>Find a stack</span><input id="find" type="search" autocomplete="off" placeholder="a name, a word, an author"></label>
 </section>
+<details class="newhere">
+  <summary>New here? What is a stack?</summary>
+  <ol class="three">
+    <li><b>Play.</b> A stack is a small program: a game, a tool, a toy. Each one here plays in your browser, with nothing to install.</li>
+    <li><b>Look inside.</b> Every stack's page lets you read all of its scripts, in plain English-like xTalk, to see how it works.</li>
+    <li><b>Make your own.</b> Stacks are made with <a href="%(oxt)s">OXT-Beyond</a>, free and open source. Download one, open it there and change it, or <a href="share.html">share a stack you made</a>.</li>
+  </ol>
+</details>
+<section class="filters" aria-label="Find a stack">
+  <form class="find" role="search" action="index.html">
+    <label for="find">Find a stack</label>
+    <div class="field"><input id="find" name="q" type="search" autocomplete="off" placeholder="a name, a word, an author" aria-describedby="count"><button type="button" class="clear" id="clear" hidden aria-label="Clear the search">&times;</button></div>
+  </form>
+  <div class="chips" id="chips" role="group" aria-label="Show only" hidden><button type="button" class="chip" data-tag="" aria-pressed="true">All</button>%(chips)s</div>
+  <p class="count" id="count" role="status" aria-live="polite">%(total)d stacks</p>
+</section>
+<h2 class="sr">The stacks</h2>
 <ul class="cards" id="cards">
-%s
+%(cards)s
 </ul>
-<p id="none" hidden>No stack matches that. Try another word.</p>
+<div class="none" id="none" hidden>
+  <p>No stack matches that.</p>
+  <button type="button" class="ghost" id="all">Show all the stacks</button>
+</div>
 <script>
 (function () {
-  var box = document.getElementById('find'), none = document.getElementById('none');
+  var box = document.getElementById('find'), clear = document.getElementById('clear');
+  var chips = document.getElementById('chips'), count = document.getElementById('count');
+  var none = document.getElementById('none'), total = %(total)d;
   var cards = [].slice.call(document.querySelectorAll('#cards .card'));
-  box.addEventListener('input', function () {
+  var params = new URLSearchParams(location.search), tag = params.get('tag') || '';
+  box.value = params.get('q') || '';
+  chips.hidden = false;
+  function extra() {
+    // a tag with no button of its own (from a stack's page) gets one
+    var known = [].some.call(chips.querySelectorAll('.chip'), function (b) { return b.getAttribute('data-tag') === tag; });
+    if (tag && !known) {
+      var b = document.createElement('button');
+      b.type = 'button'; b.className = 'chip'; b.setAttribute('data-tag', tag); b.textContent = tag;
+      chips.appendChild(b);
+    }
+  }
+  function show() {
     var words = box.value.toLowerCase().split(/\\s+/).filter(Boolean), shown = 0;
     cards.forEach(function (c) {
-      var text = c.getAttribute('data-find');
-      var on = words.every(function (w) { return text.indexOf(w) >= 0; });
+      var text = c.getAttribute('data-find'), tags = c.getAttribute('data-tags').split('|');
+      var on = words.every(function (w) { return text.indexOf(w) >= 0; }) && (!tag || tags.indexOf(tag) >= 0);
       c.hidden = !on;
       if (on) shown++;
     });
+    [].forEach.call(chips.querySelectorAll('.chip'), function (b) {
+      b.setAttribute('aria-pressed', String(b.getAttribute('data-tag') === tag));
+    });
+    clear.hidden = !box.value;
     none.hidden = shown > 0;
+    count.textContent = shown === total ? total + ' stacks' : shown + ' of ' + total + ' stacks';
+    var q = new URLSearchParams();
+    if (box.value) q.set('q', box.value);
+    if (tag) q.set('tag', tag);
+    var s = q.toString();
+    history.replaceState(null, '', s ? '?' + s : location.pathname);
+  }
+  extra();
+  box.addEventListener('input', show);
+  box.form.addEventListener('submit', function (ev) { ev.preventDefault(); show(); });
+  box.addEventListener('keydown', function (ev) { if (ev.key === 'Escape') { box.value = ''; show(); } });
+  clear.addEventListener('click', function () { box.value = ''; show(); box.focus(); });
+  chips.addEventListener('click', function (ev) {
+    var b = ev.target.closest('.chip');
+    if (!b) return;
+    tag = b.getAttribute('data-tag');
+    show();
   });
+  document.getElementById('all').addEventListener('click', function () { box.value = ''; tag = ''; show(); box.focus(); });
+  show();
 })();
-</script>''' % '\n'.join(cards)
+</script>''' % {'chips': chips, 'total': len(entries), 'oxt': OXT_URL, 'cards': '\n'.join(card_html(e) for e in entries)}
     return page('OXT Community Stacks', body,
-                description='Stacks made with OXT-Beyond, to play in your browser.')
+                description='Stacks made with OXT-Beyond, to play in your browser.', here='index.html')
 
 
 def first_sentence(text, limit=160):
@@ -262,7 +355,15 @@ def first_sentence(text, limit=160):
     return cut.rstrip('.,;:') + '...'
 
 
-def stack_page(e):
+def related(e, entries, most=3):
+    """Other stacks to show at the foot of a stack's page: those that
+    share the most tags with it first, then the rest by title."""
+    others = [o for o in entries if o['slug'] != e['slug']]
+    others.sort(key=lambda o: (-len(set(o['tags']) & set(e['tags'])), o['title'].lower(), o['slug']))
+    return others[:most]
+
+
+def stack_page(e, entries=()):
     root = '../../'
     meanings = ''.join('<li><b>%s.</b> %s</li>' % (esc(words), esc(meaning))
                        for key, words, meaning in BADGES if key in e['uses'])
@@ -276,37 +377,129 @@ def stack_page(e):
             for v in e['versions'][1:])
     paragraphs = ''.join('<p>%s</p>' % esc(p) for p in e['description'].split('\n') if p.strip())
     report = '%s/issues/new?title=%s' % (REPOSITORY_URL, urllib.parse.quote('Report: ' + e['slug']))
-    body = '''<article class="stack">
+    more = related(e, entries)
+    more_html = ''
+    if more:
+        more_html = '''<section class="more" aria-labelledby="more">
+  <h2 id="more">More stacks to play</h2>
+  <ul class="cards small">%s</ul>
+  <p><a href="%sindex.html">See all the stacks</a></p>
+</section>''' % (''.join(card_html(o, root) for o in more), root)
+    body = '''<nav class="crumbs" aria-label="Breadcrumb"><a href="%(root)sindex.html">All stacks</a> <span aria-hidden="true">/</span> <span aria-current="page">%(title)s</span></nav>
+<article class="stack">
   <div class="lead">
-    %(shot)s
-    <div>
+    <a class="shotlink large" href="play.html" tabindex="-1" aria-hidden="true">%(shot)s</a>
+    <div class="intro">
       <h1>%(title)s</h1>
       <p class="by">by %(author)s</p>
-      <a class="play big" href="play.html">Play</a>
       %(badges)s
+      <div class="actions">
+        <a class="play big" href="play.html"><span aria-hidden="true">&#9654;</span> Play</a>
+        <a class="ghost" href="%(root)s%(source)s">Read the scripts</a>
+      </div>
+      <p class="small">Plays right here in your browser, boxed in: it cannot reach your files or your computer. <a href="%(root)ssafety.html">How that works.</a></p>
     </div>
   </div>
-  <div class="about">%(paragraphs)s</div>
-  <h2>What this stack uses</h2>
-  <ul class="plain">%(meanings)s</ul>
-  <p>It plays inside a boxed-in part of this page and cannot reach your files or your computer. <a href="%(root)ssafety.html">How that works.</a></p>
-  <h2>Look inside</h2>
-  <ul class="plain">
-    <li><a href="%(root)s%(source)s">Read its scripts</a> (%(lines)s lines)</li>
-    <li><a href="%(root)s%(download)s" download>Download it</a> (%(size)s) to open in OXT-Beyond. A stack you open on your own computer is no longer boxed in: it can do what any program can. Open stacks only from people you trust, and read the scripts first.</li>
-  </ul>
-  <p class="small">Version %(version)s. Licence: %(licence)s. %(tags)s</p>
-  <p class="small"><a href="%(report)s">Report a problem with this stack</a>, or tell us on the <a href="%(forum)s">OpenXTalk forum</a>.</p>
-  %(older)s
-</article>''' % {
-        'shot': screenshot_html(e, root, 'shot large'), 'title': esc(e['title']), 'author': esc(e['author']),
+  <div class="cols">
+    <div class="main-col">
+      <h2>About this stack</h2>
+      <div class="about">%(paragraphs)s</div>
+      <h2>What this stack uses</h2>
+      <ul class="plain">%(meanings)s</ul>
+      %(dev)s
+      <h2>Open it in OXT-Beyond</h2>
+      <ol class="three">
+        <li><a class="ghost" href="%(root)s%(download)s" download>Download it (%(size)s)</a></li>
+        <li>Unzip the file you get.</li>
+        <li>Open <b>%(main)s</b> in <a href="%(oxt)s">OXT-Beyond</a> with <b>File &gt; Open Stack...</b> and change anything you like.</li>
+      </ol>
+      <p class="note">A stack you open on your own computer is no longer boxed in: it can do what any program can. Open stacks only from people you trust, and <a href="%(root)s%(source)s">read the scripts</a> first.</p>
+      %(older)s
+    </div>
+    <aside class="facts" aria-label="Facts">
+      <dl>
+        <dt>Made by</dt><dd>%(author)s</dd>
+        <dt>Version</dt><dd>%(version)s</dd>
+        <dt>Licence</dt><dd>%(licence)s</dd>
+        <dt>Download</dt><dd>%(size)s</dd>
+        <dt>Scripts</dt><dd>%(lines)s lines</dd>
+        <dt>Objects</dt><dd>%(objects)s</dd>
+        %(tags)s
+      </dl>
+      <p class="small"><a href="%(report)s">Report a problem with this stack</a>, or tell us on the <a href="%(forum)s">OpenXTalk forum</a>.</p>
+    </aside>
+  </div>
+</article>
+%(more)s''' % {
+        'shot': screenshot_html(e, root, 'shot large', 'A picture of %s' % e['title']), 'title': esc(e['title']),
+        'author': esc(e['author']),
         'badges': badges_html(e['uses']), 'paragraphs': paragraphs, 'meanings': meanings, 'root': root,
         'source': url(e['source']), 'download': url(e['download']), 'lines': e['script_lines'],
         'size': human_size(e['size']), 'version': esc(e['version']),
         'licence': esc(listing_rules.LICENCES[e['licence']]),
-        'tags': 'Tags: %s.' % esc(', '.join(e['tags'])) if e['tags'] else '',
-        'report': esc(report), 'forum': FORUM_URL, 'older': older}
+        'tags': '<dt>Tags</dt><dd>%s</dd>' % tags_html(root, e['tags']) if e['tags'] else '',
+        'report': esc(report), 'forum': FORUM_URL, 'older': older, 'more': more_html,
+        'dev': dev_html(e, root), 'main': esc(e['main']), 'oxt': OXT_URL,
+        'objects': sum(st['objects'] for st in e['_dev']['stacks'])}
     return page('%s - OXT Community Stacks' % e['title'], body, root, first_sentence(e['description']))
+
+
+def source_anchor(index, line=None):
+    """The id of a script (and one of its lines) on a source page."""
+    return 's%d' % index if line is None else 's%d-L%d' % (index, line)
+
+
+def script_index(sources):
+    """{'file, stack "name": label': its place on the source page}, the
+    way the scanner names where a finding is."""
+    return {'%s, stack "%s": %s' % (f, st, label): i for i, (f, st, label, _) in enumerate(sources)}
+
+
+def dev_html(e, root):
+    """For people who write xTalk: what the stack is made of, and the
+    very lines that make each label, each a link into its scripts."""
+    dev = e['_dev']
+    rows = []
+    for st in dev['stacks']:
+        extra = ''
+        if st.get('substacks'):
+            extra += ', with %d substack%s' % (len(st['substacks']), '' if len(st['substacks']) == 1 else 's')
+        if st.get('widgets'):
+            extra += '; widgets: %s' % ', '.join(st['widgets'])
+        rows.append('<li><b>%s</b> (%s): %d objects, %d lines of script%s</li>'
+                    % (esc(st['name']), esc(st['file']), st['objects'], st['script_lines'], esc(extra)))
+    where = script_index(dev['sources'])
+    found = []
+    for key, words, _ in BADGES:
+        lines = [f for f in dev['findings'] if f['rule'] == key or f['level'] == 'uses:' + key]
+        if not lines:
+            continue
+        items = []
+        for f in lines[:12]:
+            i = where.get(f['where'])
+            place = esc('%s, line %s' % (f['where'].split(': ', 1)[-1], f['line']))
+            if i is not None and f.get('line'):
+                place = '<a href="%s%s#%s">%s</a>' % (root, url(e['source']), source_anchor(i, f['line']), place)
+            text = f['text']
+            if i is not None and f.get('line'):
+                # (the line as its author wrote it, not as the checker reads it)
+                written = dev['sources'][i][3].split('\n')
+                if 0 < f['line'] <= len(written) and written[f['line'] - 1].strip():
+                    text = written[f['line'] - 1].strip()
+            items.append('<li>%s<br><code>%s</code></li>' % (place, esc(text)))
+        more = '<li class="small">and %d more</li>' % (len(lines) - 12) if len(lines) > 12 else ''
+        found.append('<h4>%s</h4><ul class="lines">%s%s</ul>' % (esc(words), ''.join(items), more))
+    notes = ''
+    if dev['notes']:
+        notes = '<h4>Script it builds as it runs</h4><ul class="plain">%s</ul>' % ''.join(
+            '<li>%s</li>' % esc(n['text'] if isinstance(n, dict) else n) for n in dev['notes'][:12])
+    return '''<details class="dev">
+  <summary>For xTalk developers: how it is built</summary>
+  <ul class="plain">%s</ul>
+  %s%s
+  <p class="small">The labels come from the checker, which reads every script without running any of it. <a href="%s%s">Read all the scripts</a>.</p>
+</details>''' % (''.join(rows), ''.join(found) or '<p>The checker found nothing that reaches outside the stack.</p>',
+                notes, root, url(e['source']))
 
 
 def human_size(size):
@@ -351,17 +544,28 @@ def play_page(e):
 
 def source_page(e, version, sources):
     root = '../../../'
-    parts = []
-    for file, stack, label, script in sources:
-        parts.append('<section><h2>%s</h2><p class="small">%s, stack &quot;%s&quot;</p><pre>%s</pre></section>'
-                     % (esc(label), esc(file), esc(stack), esc(script)))
+    parts, toc = [], []
+    for i, (file, stack, label, script) in enumerate(sources):
+        lines = script.split('\n')
+        numbered = ''.join('<span class="ln" id="%s">%s\n</span>' % (source_anchor(i, n), esc(text))
+                           for n, text in enumerate(lines, 1))
+        parts.append('<section id="%s"><h2>%s</h2><p class="small">%s, stack &quot;%s&quot;, %d lines</p><pre>%s</pre></section>'
+                     % (source_anchor(i), esc(label), esc(file), esc(stack), len(lines), numbered))
+        toc.append('<li><a href="#%s">%s</a> <span class="small">%s, %d lines</span></li>'
+                   % (source_anchor(i), esc(label), esc(stack), len(lines)))
     if not parts:
         parts.append('<p>This stack has no scripts.</p>')
-    body = '''<article class="source">
+    contents = ''
+    if len(toc) > 1:
+        contents = '<details class="toc" open><summary>%d scripts in this stack</summary><ol>%s</ol></details>' % (
+            len(toc), ''.join(toc))
+    body = '''<nav class="crumbs" aria-label="Breadcrumb"><a href="%s">All stacks</a> <span aria-hidden="true">/</span> <a href="../index.html">%s</a> <span aria-hidden="true">/</span> <span aria-current="page">Scripts</span></nav>
+<article class="source">
 <h1>The scripts of %s</h1>
-<p>Version %s. <a href="../index.html">Back to the stack</a>. These are the scripts exactly as they are in the stack that plays here.</p>
+<p>Version %s. These are the scripts exactly as they are in the stack that plays here. Each line has its number, and a link to a line keeps it.</p>
 %s
-</article>''' % (esc(e['title']), esc(version), '\n'.join(parts))
+%s
+</article>''' % (root + 'index.html', esc(e['title']), esc(e['title']), esc(version), contents, '\n'.join(parts))
     return page('Scripts of %s - OXT Community Stacks' % e['title'], body, root)
 
 
@@ -378,7 +582,10 @@ def entry_of(slug, versions):
              'version': latest['version'], 'main': listing['main'],
              'page': 's/%s/index.html' % slug, 'play': 's/%s/play.html' % slug,
              'script_lines': sum(s['script_lines'] for s in latest['stacks']),
-             'versions': []}
+             'versions': [],
+             # (for the pages only, not the index the IDE reads)
+             '_dev': {'stacks': latest['stacks'], 'findings': latest.get('findings', []),
+                      'notes': latest['notes'], 'sources': latest.get('_sources', [])}}
     for report in versions:
         base = 's/%s/%s/' % (slug, report['version'])
         entry['versions'].append({
@@ -426,11 +633,12 @@ def write(path, text):
 
 
 def static_page(name, root=''):
+    here = name if name in dict(NAV) else None
     with open(os.path.join(SITE_ASSETS, name), encoding='utf-8') as f:
         text = f.read()
     title, body = text.split('\n', 1)
     return page(title.strip(), body.replace('@REPOSITORY@', REPOSITORY_URL).replace('@FORUM@', FORUM_URL)
-                .replace('@OXT@', OXT_URL), root)
+                .replace('@OXT@', OXT_URL), root, here=here)
 
 
 def build(stacks_dir, engine, player, out, no_network=False, strict=False, log=print, env=None):
@@ -478,10 +686,11 @@ def build(stacks_dir, engine, player, out, no_network=False, strict=False, log=p
         for report, record in zip(versions, entry['versions']):
             write(os.path.join(out, *record['source'].split('/')),
                   source_page(entry, report['version'], report['_sources']))
-        write(os.path.join(out, 's', slug, 'index.html'), stack_page(entry))
         write(os.path.join(out, 's', slug, 'play.html'), play_page(entry))
 
     entries.sort(key=lambda e: (e['title'].lower(), e['slug']))
+    for entry in entries:
+        write(os.path.join(out, 's', entry['slug'], 'index.html'), stack_page(entry, entries))
     write(os.path.join(out, 'index.html'), gallery_page(entries))
     for name in ('safety.html', 'share.html', '404.html'):
         write(os.path.join(out, name), static_page(name))
@@ -494,6 +703,7 @@ def build(stacks_dir, engine, player, out, no_network=False, strict=False, log=p
         item = dict(e)
         item.pop('screenshot_url')
         item.pop('notes')
+        item.pop('_dev')
         index['stacks'].append(item)
     text = json.dumps(index, indent=1, sort_keys=True, ensure_ascii=True) + '\n'
     write(os.path.join(out, 'index.json'), text)
