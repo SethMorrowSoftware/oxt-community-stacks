@@ -6,6 +6,8 @@ reads each one before it is listed, and the builder of the gallery: a web
 site where anyone can press **Play** and try a stack in their browser,
 with nothing to install.
 
+**The gallery: <https://oxt-stacks.github.io/oxt-community-stacks/>**
+
 ## Is it safe to play a stack from here?
 
 A stack is a small program, and a program does what its author wrote. So

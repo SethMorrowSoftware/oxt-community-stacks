@@ -63,7 +63,7 @@ SITE_ASSETS = os.path.join(ROOT, 'site')
 # so the pages keep pointing at it when it moves to another owner.
 _REPOSITORY = os.environ.get('GITHUB_REPOSITORY', '')
 if not re.match(r'^[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9_.-]+$', _REPOSITORY):
-    _REPOSITORY = 'SethMorrowSoftware/oxt-community-stacks'
+    _REPOSITORY = 'oxt-stacks/oxt-community-stacks'
 REPOSITORY_URL = 'https://github.com/' + _REPOSITORY
 FORUM_URL = 'https://openxtalk.org/forum/'
 OXT_URL = 'https://github.com/SethMorrowSoftware/OpenXTalk-Beyond'

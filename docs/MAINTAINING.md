@@ -80,17 +80,24 @@ gallery's own is the second wall behind that box.
   site's cookies.
 - Not on `sethmorrowsoftware.github.io`: that is the address of
   OXT-Beyond's web IDE and its Stack Player, which keep people's own
-  stacks in the browser. The deploy job of `publish.yml` does not run
-  while the repository belongs to that account.
+  stacks in the browser.
 - **On a free GitHub organization of its own**, whose `github.io`
   address holds nothing else.
 
-Setting that up, once:
+It lives at **<https://oxt-stacks.github.io/oxt-community-stacks/>**:
+the repository belongs to the `oxt-stacks` organization, made for the
+gallery alone. The deploy job of `publish.yml` runs only while the
+repository belongs to that organization, so a fork, or a move anywhere
+else, builds the gallery but never puts it on the web.
+
+How it was set up, once (and how to do it again, should it ever move):
 
 1. Create a free organization on GitHub.
 2. Transfer this repository to it (Settings > General > Transfer).
-3. In the repository, Settings > Pages > Source: **GitHub Actions**.
-4. Run the Publish workflow (Actions > Publish > Run workflow), or merge
+3. Change the owner in the `if:` of the deploy job of `publish.yml`, and
+   the fallback in `tools/build_site.py`, to the new organization.
+4. In the repository, Settings > Pages > Source: **GitHub Actions**.
+5. Run the Publish workflow (Actions > Publish > Run workflow), or merge
    anything. Its last job plays every stack on the real address.
 
 Keep the organization for the gallery alone. Any other site published
