@@ -1,0 +1,13 @@
+{
+  "title": "Nova Rescue",
+  "author": "OXT-Beyond contributors",
+  "description": "A space rescue made for a phone: drag to fly, save the drifting crews, dodge meteors and raiders, and face a mothership every fourth sector. It plays with a mouse and keys too. Art and sounds by Kenney.",
+  "licence": "GPL-3.0-only",
+  "main": "Nova Rescue.oxtstack",
+  "screenshot": "screenshot.webp",
+  "tags": [
+    "game",
+    "phone",
+    "touch"
+  ]
+}

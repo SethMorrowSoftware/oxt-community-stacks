@@ -1,0 +1,13 @@
+{
+  "title": "Box2Dxt Platformer",
+  "author": "OXT-Beyond contributors",
+  "description": "Seven scrolling levels of a platformer built on Box2D: run, double jump, wall jump and dash, ride lifts and rope bridges, stomp the slimes and collect every coin to turn the flag gold. Arrow keys or WASD, Space to jump.",
+  "licence": "GPL-3.0-only",
+  "main": "Box2Dxt Platformer.oxtstack",
+  "screenshot": "screenshot.webp",
+  "tags": [
+    "game",
+    "keyboard",
+    "physics"
+  ]
+}
