@@ -16,11 +16,14 @@
 # WHERE THE SITE MAY LIVE. Never on an address shared with something a
 # visitor is signed in to or keeps data in. Stacks are other people's
 # programs; each plays boxed in, and an address of the gallery's own is
-# the second wall behind that box. sethmorrowsoftware.github.io is the
-# address of OXT-Beyond's web IDE and its Stack Player, which keep
-# people's own stacks in the browser, so the deploy job does not run while
-# the repository belongs to that account. It runs once the repository is
-# in an organization of its own (see docs/MAINTAINING.md).
+# the second wall behind that box. The deploy job runs only while the
+# repository belongs to the oxt-stacks organization, which publishes
+# nothing else, so the gallery lives at oxt-stacks.github.io. Anywhere else
+# (a fork, or a move back to sethmorrowsoftware.github.io, the address of
+# OXT-Beyond's web IDE and its Stack Player, which keep people's own
+# stacks in the browser) it builds and signs but never deploys. Move it
+# again only to an address of its own, and change the owner here then
+# (docs/MAINTAINING.md, "Where the gallery may live").
 name: Publish
 
 on:
@@ -148,7 +151,7 @@ jobs:
     name: Put it on the web
     needs: sign
     # See "WHERE THE SITE MAY LIVE" at the top of this file.
-    if: github.repository_owner != 'SethMorrowSoftware'
+    if: github.repository_owner == 'oxt-stacks'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
