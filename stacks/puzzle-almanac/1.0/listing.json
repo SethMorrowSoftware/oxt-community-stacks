@@ -1,0 +1,14 @@
+{
+  "title": "Puzzle Almanac",
+  "author": "OXT-Beyond contributors",
+  "description": "A daily puzzle book made for a phone: a Number Place in three sizes and a Hidden Word of four to six letters, new every day and the same for everyone, with a sticker book to fill. Every puzzle can be solved without a guess.",
+  "licence": "GPL-3.0-only",
+  "main": "Puzzle Almanac.oxtstack",
+  "screenshot": "screenshot.webp",
+  "tags": [
+    "game",
+    "phone",
+    "puzzle",
+    "touch"
+  ]
+}
