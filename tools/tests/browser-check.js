@@ -96,6 +96,29 @@ async function play(browser, base, slug, waitFor) {
     await page.goto(base + 'index.html');
     result((await page.locator('#cards .card').count()) === index.stacks.length,
       'the gallery shows ' + index.stacks.length + ' stack(s)');
+    if (index.stacks.length) {
+      // finding a stack: by a word, by a tag (as a stack's page links
+      // to it), and back to all of them
+      const shown = () => page.locator('#cards .card:visible').count();
+      const word = index.stacks[0].title.toLowerCase().split(/\s+/)[0];
+      const byWord = index.stacks.filter(s => [s.title, s.author, s.description].concat(s.tags)
+        .join(' ').toLowerCase().indexOf(word) >= 0).length;
+      await page.fill('#find', word);
+      result((await shown()) === byWord, 'searching "' + word + '" shows ' + byWord + ' stack(s)');
+      await page.press('#find', 'Escape');
+      result((await shown()) === index.stacks.length, 'Escape shows them all again');
+      const tagged = index.stacks.filter(s => s.tags.length)[0];
+      if (tagged) {
+        const tag = tagged.tags[0];
+        const withTag = index.stacks.filter(s => s.tags.indexOf(tag) >= 0).length;
+        await page.goto(base + 'index.html?tag=' + encodeURIComponent(tag));
+        result((await shown()) === withTag, 'index.html?tag=' + tag + ' shows ' + withTag + ' stack(s)');
+        result((await page.locator('.chip[aria-pressed="true"]').textContent()).indexOf(tag) === 0,
+          'and its button is the one pressed');
+        await page.click('.chip[data-tag=""]');
+        result((await shown()) === index.stacks.length, 'All shows them all again');
+      }
+    }
     await page.close();
 
     let slugs = index.stacks.map(s => s.slug).filter(s => s !== hostile);

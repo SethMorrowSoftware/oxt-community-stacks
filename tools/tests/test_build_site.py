@@ -260,6 +260,59 @@ class Site(unittest.TestCase):
                 target = os.path.normpath(os.path.join(os.path.dirname(path), link.split('?')[0].split('#')[0]))
                 self.assertIn(target.replace(os.sep, '/'), files, '%s links to %s' % (path, link))
 
+    # -- finding your way: for people new to stacks and for xTalk developers
+
+    def test_every_page_has_a_skip_link_and_says_where_you_are(self):
+        for rel, here in (('index.html', 'index.html'), ('share.html', 'share.html'), ('safety.html', 'safety.html'),
+                          ('s/alpha/index.html', None), ('s/alpha/1.10/source.html', None)):
+            text = self.read(rel)
+            self.assertIn('<a class="skip" href="#main">', text, rel)
+            self.assertIn('<main id="main"', text, rel)
+            current = re.findall(r'<a href="[^"]*?([a-z]+\.html)"[^>]*aria-current="page"', text)
+            self.assertEqual(current, [here] if here else [], rel)
+
+    def test_the_gallery_can_be_narrowed_by_words_and_tags(self):
+        text = self.read('index.html')
+        self.assertIn('data-tags="game"', text)
+        self.assertIn('id="count" role="status" aria-live="polite">3 stacks<', text)
+        # one stack has the tag "game": too few for a button of its own,
+        # but its page still links to the gallery showing only it
+        self.assertNotIn('data-tag="game"', text)
+        self.assertIn('data-tag="" aria-pressed="true">All<', text)
+        self.assertIn('New here? What is a stack?', text)
+
+    def test_a_stacks_tags_lead_to_the_gallery_showing_that_tag(self):
+        self.assertIn('href="../../index.html?tag=game"', self.read('s/tricky/index.html'))
+
+    def test_a_stacks_page_offers_other_stacks_but_not_itself(self):
+        text = self.read('s/alpha/index.html')
+        more = text[text.index('id="more"'):]
+        self.assertIn('href="../../s/tricky/index.html"', more)
+        self.assertIn('href="../../s/notpicture/index.html"', more)
+        self.assertNotIn('s/alpha/', more)
+
+    def test_the_developer_details_point_at_the_very_line(self):
+        text = self.read('s/alpha/index.html')
+        self.assertIn('For xTalk developers', text)
+        link = re.search(r'href="\.\./\.\./s/alpha/1\.10/source\.html#(s\d+-L(\d+))"', text)
+        self.assertIsNotNone(link)
+        source = self.read('s/alpha/1.10/source.html')
+        line = re.search(r'<span class="ln" id="%s">([^\n]*)\n' % link.group(1), source)
+        self.assertIsNotNone(line, link.group(1))
+        self.assertIn('save this stack', line.group(1))
+        # the line as written, under the link
+        self.assertIn('<code>save this stack</code>', text)
+
+    def test_the_index_for_the_ide_keeps_its_shape(self):
+        for entry in json.loads(self.read('index.json'))['stacks']:
+            self.assertNotIn('_dev', entry)
+            self.assertNotIn('notes', entry)
+
+    def test_a_stack_with_no_picture_shows_its_first_letter(self):
+        self.assertIn('<div class="shot large none" aria-hidden="true"><span>T</span></div>',
+                      self.read('s/tricky/index.html'))
+        self.assertIn('alt="A picture of Alpha"', self.read('s/alpha/index.html'))
+
     def test_an_out_folder_with_something_in_it_is_refused(self):
         with self.assertRaises(build_site.BuildError):
             build_site.build(os.path.join(self.root, 'stacks'), fixtures.ENGINE, self.player, self.out,
@@ -280,3 +333,21 @@ class Empty(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class Helpers(unittest.TestCase):
+    """The page helpers that need no engine."""
+
+    def test_common_tags_are_those_of_two_stacks_or_more_the_most_used_first(self):
+        entries = [{'tags': ['game', 'music']}, {'tags': ['game', 'toy']}, {'tags': ['toy', 'game']}, {'tags': ['music']}]
+        self.assertEqual(build_site.common_tags(entries), [('game', 3), ('music', 2), ('toy', 2)])
+        self.assertEqual(build_site.common_tags(entries, most=1), [('game', 3)])
+
+    def test_related_stacks_share_tags_first(self):
+        e = {'slug': 'a', 'title': 'A', 'tags': ['game']}
+        others = [e, {'slug': 'b', 'title': 'B', 'tags': []}, {'slug': 'c', 'title': 'C', 'tags': ['game']},
+                  {'slug': 'd', 'title': 'D', 'tags': []}, {'slug': 'e', 'title': 'E', 'tags': []}]
+        self.assertEqual([o['slug'] for o in build_site.related(e, others)], ['c', 'b', 'd'])
+
+    def test_a_tag_is_quoted_in_its_link(self):
+        self.assertEqual(build_site.tag_url('../../', 'live data'), '../../index.html?tag=live%20data')
