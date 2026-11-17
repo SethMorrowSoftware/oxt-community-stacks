@@ -13,7 +13,7 @@ import listing  # noqa: E402
 
 PATHS = {'listing.json', 'Beat Box.oxtstack', 'shot.png', 'notes.txt'}
 GOOD = {'title': 'Beat Box', 'author': 'A. Name', 'description': 'A drum machine with four tracks.',
-        'licence': 'MIT', 'main': 'Beat Box.oxtstack', 'screenshot': 'shot.png', 'tags': ['music', 'game']}
+        'licence': 'GPL-3.0-only', 'main': 'Beat Box.oxtstack', 'screenshot': 'shot.png', 'tags': ['music', 'game']}
 
 
 def problems(**changes):
@@ -76,9 +76,29 @@ class Listing(unittest.TestCase):
 
     def test_licence_must_be_on_the_list(self):
         self.assertIsNone(problems(licence='Proprietary')[0])
-        self.assertIsNone(problems(licence=['MIT'])[0])
+        self.assertIsNone(problems(licence=['GPL-3.0-only'])[0])
         for name in listing.LICENCES:
             self.assertIsNotNone(problems(licence=name)[0])
+
+    def test_a_community_stack_is_gpl_3(self):
+        # the engine and the player a stack plays on are GPL 3, so the
+        # stack is too; the licences the gallery once took are refused
+        self.assertEqual(set(listing.LICENCES), {'GPL-3.0-only', 'GPL-3.0-or-later'})
+        for name in ('MIT', 'Apache-2.0', 'BSD-2-Clause', 'BSD-3-Clause', 'GPL-2.0-or-later',
+                     'LGPL-3.0-or-later', 'MPL-2.0', 'CC0-1.0', 'CC-BY-4.0', 'CC-BY-SA-4.0', 'Unlicense'):
+            out, found = problems(licence=name)
+            self.assertIsNone(out, name)
+            self.assertTrue(any('GPL 3' in p for p in found), found)
+
+    def test_every_stack_here_is_gpl_3(self):
+        root = os.path.join(os.path.dirname(TOOLS), 'stacks')
+        seen = 0
+        for slug in sorted(os.listdir(root)):
+            for version in sorted(os.listdir(os.path.join(root, slug))):
+                with open(os.path.join(root, slug, version, 'listing.json'), encoding='utf-8') as f:
+                    self.assertIn(json.load(f)['licence'], listing.LICENCES, slug + ' ' + version)
+                seen += 1
+        self.assertGreater(seen, 0)
 
     def test_main_must_be_a_file_of_the_folder(self):
         self.assertIsNone(problems(main='Other.oxtstack')[0])
@@ -142,6 +162,13 @@ class Documents(unittest.TestCase):
         self.assertEqual(len(row), 1)
         named = set(re.findall(r'`([A-Za-z0-9.-]+)`', row[0])) - {'licence'}
         self.assertEqual(named, set(listing.LICENCES))
+
+    def test_the_share_page_asks_for_gpl_3_and_no_other(self):
+        with open(os.path.join(os.path.dirname(TOOLS), 'site', 'share.html'), encoding='utf-8') as f:
+            page = f.read()
+        self.assertIn('GPL 3', page)
+        for word in ('MIT', 'BSD', 'Apache', 'CC0', 'Unlicense'):
+            self.assertNotIn(word, page)
 
     def test_the_readme_gives_the_real_lengths(self):
         for name, (low, high) in listing.LENGTHS.items():

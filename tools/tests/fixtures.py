@@ -63,7 +63,7 @@ def make_folder(root, slug='test-stack', version='1.0', title='Test Stack', list
     main = stack.pop('file', title + '.oxtstack')
     make_stack(os.path.join(folder, main), stack.pop('name', title), **stack)
     data = {'title': title, 'author': 'Test Author', 'description': 'A stack that the tests made.',
-            'licence': 'MIT', 'main': main}
+            'licence': 'GPL-3.0-only', 'main': main}
     if screenshot:
         with open(os.path.join(folder, 'screenshot.png'), 'wb') as f:
             f.write(PNG)

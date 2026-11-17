@@ -68,7 +68,7 @@ stacks/
   "title": "Beat Box",
   "author": "A. Name",
   "description": "A drum machine with sixteen steps. Click the squares to lay down a beat.",
-  "licence": "MIT",
+  "licence": "GPL-3.0-only",
   "main": "Beat Box.oxtstack",
   "screenshot": "screenshot.png",
   "tags": ["music", "sound"]
@@ -80,7 +80,7 @@ stacks/
 | `title` | The stack's name, 2 to 60 characters. |
 | `author` | Your name as you want it shown, 2 to 40 characters. |
 | `description` | What the stack does, 10 to 600 characters. Plain text: no links, no `<` or `>`. |
-| `licence` | The terms on which others may use it. One of `MIT`, `Apache-2.0`, `BSD-2-Clause`, `BSD-3-Clause`, `GPL-3.0-only`, `GPL-3.0-or-later`, `GPL-2.0-or-later`, `LGPL-3.0-or-later`, `MPL-2.0`, `CC0-1.0`, `CC-BY-4.0`, `CC-BY-SA-4.0`, `Unlicense`. Not sure? `MIT` lets people use and learn from your stack as long as they keep your name on it. |
+| `licence` | `GPL-3.0-only` or `GPL-3.0-or-later`. Every community stack is GPL 3, the licence of OXT-Beyond itself: others may use, change and share it, as long as they share their changes the same way. |
 | `main` | The file name of the stack to open. |
 | `screenshot` | Optional. The file name of a picture in the folder. |
 | `tags` | Optional. Up to five short lower-case words. |
