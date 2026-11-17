@@ -94,6 +94,22 @@ class Sign(unittest.TestCase):
         with self.assertRaises(sign.KeyError_):
             sign.secret_seed({sign.SECRET_ENV: 'abcd'})
 
+    def test_the_repository_public_key_is_a_key(self):
+        # signing-key.pub is what the IDE is given to check index.sig
+        # with: one line, the base64 of a point on the curve. A file
+        # that is anything else would make every signature fail there.
+        if not os.path.isfile(sign.PUBLIC_KEY_FILE):
+            self.skipTest('no signing key has been made yet')
+        with open(sign.PUBLIC_KEY_FILE, 'rb') as f:
+            raw = f.read()
+        self.assertRegex(raw, rb'\A[A-Za-z0-9+/]{43}=\n\Z')
+        public = sign.read_public()
+        self.assertEqual(len(public), 32)
+        self.assertIsNotNone(ed25519._decompress(public))
+        # and the secret half is nowhere in the repository
+        root = os.path.dirname(sign.PUBLIC_KEY_FILE)
+        self.assertEqual([n for n in os.listdir(root) if n.endswith('.secret')], [])
+
     def test_new_key_never_prints_the_secret(self):
         with tempfile.TemporaryDirectory() as folder:
             # a copy of the tools, so the repository's own signing-key.pub
