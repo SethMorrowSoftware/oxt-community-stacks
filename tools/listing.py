@@ -5,7 +5,7 @@
       "title": "Beat Box",
       "author": "A. Name",
       "description": "A drum machine with four tracks.",
-      "licence": "MIT",
+      "licence": "GPL-3.0-only",
       "main": "Beat Box.oxtstack",
       "screenshot": "screenshot.png",        (optional)
       "tags": ["music", "game"]              (optional, at most five)
@@ -25,22 +25,15 @@ import re
 
 MAX_LISTING_BYTES = 16 * 1024
 
-# The licences an author can choose: ones that let other people play,
-# read and learn from the stack. The value is what the gallery shows.
+# The licences an author can choose. A stack plays on OXT-Beyond's
+# engine, which is GPL 3, and the gallery serves it with that engine's
+# player, so a community stack is GPL 3 too: the licence of OXT-Beyond
+# and of LiveCode Community before it. A published stack keeps the licence
+# it was listed under; one that a rule now refuses is left out of the
+# gallery with a warning. The value is what the gallery shows.
 LICENCES = {
-    'MIT': 'MIT',
-    'Apache-2.0': 'Apache 2.0',
-    'BSD-2-Clause': 'BSD 2-Clause',
-    'BSD-3-Clause': 'BSD 3-Clause',
     'GPL-3.0-only': 'GPL 3',
     'GPL-3.0-or-later': 'GPL 3 or later',
-    'GPL-2.0-or-later': 'GPL 2 or later',
-    'LGPL-3.0-or-later': 'LGPL 3 or later',
-    'MPL-2.0': 'MPL 2.0',
-    'CC0-1.0': 'Public domain (CC0)',
-    'CC-BY-4.0': 'CC BY 4.0',
-    'CC-BY-SA-4.0': 'CC BY-SA 4.0',
-    'Unlicense': 'Public domain (Unlicense)',
 }
 
 SLUG = re.compile(r'^[a-z0-9]+(?:-[a-z0-9]+)*$')
@@ -110,7 +103,7 @@ def check(data, paths):
             out[key] = _plain(data[key], key, low, high, problems)
     if 'licence' in data:
         if not isinstance(data['licence'], str) or data['licence'] not in LICENCES:
-            problems.append('"licence" must be one of: %s.' % ', '.join(sorted(LICENCES)))
+            problems.append('"licence" must be GPL 3, like OXT-Beyond itself: one of %s.' % ', '.join(sorted(LICENCES)))
         else:
             out['licence'] = data['licence']
     if 'main' in data:
