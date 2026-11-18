@@ -73,3 +73,31 @@ def make_folder(root, slug='test-stack', version='1.0', title='Test Stack', list
     with open(os.path.join(folder, 'listing.json'), 'w', encoding='utf-8') as f:
         json.dump(data, f)
     return folder
+
+
+LIBRARY_SCRIPT = ('function tlTwice pValue\n   return pValue * 2\nend tlTwice\n\n'
+                  'private function tlHidden\n   return 1\nend tlHidden\n')
+
+
+def make_library(root, slug='test-library', version='1.0', title='Test Library', name=None, script=None,
+                 listing=None, file=None, header=True):
+    """A libraries/<slug>/<version> folder under root with one script
+    library (a script-only stack, which is a text file and needs no
+    engine to make), called `name` in scripts. Returns the folder."""
+    folder = os.path.join(root, 'libraries', slug, version)
+    os.makedirs(folder)
+    main = file or slug + '.livecodescript'
+    if name is None:
+        name = 'tests.' + slug.replace('-', '')
+    text = (script if script is not None else LIBRARY_SCRIPT)
+    if header:
+        text = 'script "%s"\n%s' % (name, text)
+    with open(os.path.join(folder, main), 'w', encoding='utf-8', newline='\n') as f:
+        f.write(text)
+    data = {'title': title, 'author': 'Test Author', 'description': 'A library that the tests made.',
+            'licence': 'MIT', 'main': main}
+    if listing:
+        data.update(listing)
+    with open(os.path.join(folder, 'listing.json'), 'w', encoding='utf-8') as f:
+        json.dump(data, f)
+    return folder

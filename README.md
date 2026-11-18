@@ -117,6 +117,75 @@ never changed, because people may already have it.
 - What a stack saves (a high score, a note) lasts only while its page is
   open. Give people an export or download button for anything to keep.
 
+## Share a script library
+
+A script library is a script that gives other people's stacks new
+commands and functions. The gallery lists these too, on its
+[Libraries](https://oxt-stacks.github.io/oxt-community-stacks/libraries.html)
+page.
+
+**A library is not played in a box.** People install it into OXT-Beyond
+and build it into their own programs, where it runs as their own scripts
+do. So a library is held to more than a stack is: it must be plain text
+that anyone can read, the checker and a person read all of it, the
+package people download is made here from that same text, and its page
+says plainly what installing means. That is care, not a guarantee:
+install libraries only from people you trust.
+
+Post the library file on the
+[OpenXTalk forum](https://openxtalk.org/forum/) with its title, your
+name, what it does and a licence, or open a pull request that adds one
+folder and nothing else:
+
+```
+libraries/
+  easing/                   your library's name: lower-case letters, digits, hyphens
+    1.0/                    its version
+      easing.livecodescript the library: a script-only stack
+      listing.json          what the gallery shows
+```
+
+`listing.json` has the fields a stack's has, with these differences:
+
+- `main` is the library's file. It must be a script-only stack: a text
+  file ending in `.livecodescript` whose first line is
+  `script "<name>"`.
+- `licence` may be `GPL-3.0-only` or `GPL-3.0-or-later`, or one of the
+  short licences that can be used together with GPL 3: `MIT`,
+  `BSD-2-Clause`, `BSD-3-Clause`, `Apache-2.0`, `LGPL-3.0-only` or
+  `LGPL-3.0-or-later`. Whatever the library's licence, a program built
+  with OXT-Beyond holds its GPL 3 engine and is shared under GPL 3 as a
+  whole.
+- `demo` (optional) is the folder name of a stack in `stacks/` that
+  shows the library at work. The library's page then has a **Try the
+  demo** button, and the demo plays in the browser, boxed in, like any
+  stack. A demo carries its own copy of the library.
+- There is no `screenshot`.
+
+### What makes a library work here
+
+- One script file, and beside it only text or pictures that explain it.
+- A name of its own on the first line, with no spaces, such as
+  `anna.easing`. Names that begin like OXT-Beyond's own (`rev...`,
+  `com.livecode.`, `org.openxtalk.`) are refused.
+- Handler names of its own. Two libraries cannot answer to one name, so
+  a handler that a listed library or the xTalk Suite already has is
+  refused. Start each with a short prefix (`ezCurve`, `ezBetween`).
+- At least one command or function that is not `private`.
+- Everything a stack may not do, a library may not: no `shell`, no
+  starting other programs, no native code, no script fetched from an
+  address.
+- Handling the engine's messages (`openStack`, `keyDown`) is allowed
+  and is pointed out to the reviewer, because a loaded library gets
+  them from every stack. Pass them on.
+
+The gallery packs each library as an extension package (`.lce`), which
+the Extension Manager of OXT-Beyond, or of any IDE built on LiveCode
+Community 9, installs. The IDE loads a script library by sending it
+`extensionInitialize`; a library that handles neither that nor
+`extensionFinalize` gets the usual pair added at its end, and its
+script page shows the added lines.
+
 ## Report a problem
 
 Every stack's page has a *Report a problem* link, which opens an issue
@@ -124,13 +193,14 @@ here. A stack that turns out to be a problem is taken down.
 
 ## For people who work on this repository
 
-- `tools/scan.py` checks one stack folder; `tools/lcscan.py` holds the
-  rules for scripts and `tools/listing.py` the rules for `listing.json`.
+- `tools/scan.py` checks one stack folder or one library folder;
+  `tools/lcscan.py` holds the rules for scripts and `tools/listing.py`
+  the rules for `listing.json`.
 - `tools/accept.py` takes a stack that came as a package (from
   OXT-Beyond's File > Share Stack...) into `stacks/`, if it can be
   shared.
-- `tools/build_site.py` builds the gallery; `tools/sign.py` signs its
-  list of stacks for the IDE.
+- `tools/build_site.py` builds the gallery and packs the libraries;
+  `tools/sign.py` signs its lists of stacks and of libraries for the IDE.
 - `tools/tests/` tests all of it, with OXT-Beyond's real engine and a
   real browser.
 - [docs/MAINTAINING.md](docs/MAINTAINING.md) says how a stack is
@@ -147,4 +217,5 @@ python3 -m unittest discover -s tools/tests
 ```
 
 The tools and pages are under the MIT licence ([LICENSE](LICENSE)). Each
-stack belongs to its author, under the licence in its `listing.json`.
+stack and each library belongs to its author, under the licence in its
+`listing.json`.

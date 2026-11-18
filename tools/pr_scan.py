@@ -43,13 +43,15 @@ import scan  # noqa: E402
 
 MARKER = '<!-- oxt-community-stacks scan -->'
 MAX_STACKS = 10
-STACK_PATH = re.compile(r'^stacks/([^/]+)/([^/]+)/(.+)$')
+# stacks/<name>/<version>/... and libraries/<name>/<version>/...
+STACK_PATH = re.compile(r'^(stacks|libraries)/([^/]+)/([^/]+)/(.+)$')
 
 
 def classify(changed):
-    """(shared, removed, other): shared and removed are sets of (slug,
-    version) with files added or changed, or with files removed; other
-    the changed paths that are not a stack's."""
+    """(shared, removed, other): shared and removed are sets of (top
+    folder, slug, version) with files added or changed, or with files
+    removed (the top folder is "stacks" or "libraries"); other the
+    changed paths that are not a stack's or a library's."""
     shared, removed, other = set(), set(), []
     for item in changed:
         paths = [(item['filename'], item.get('status', 'modified'))]
@@ -60,9 +62,9 @@ def classify(changed):
             if not m:
                 other.append(path)
             elif status == 'removed':
-                removed.add((m.group(1), m.group(2)))
+                removed.add((m.group(1), m.group(2), m.group(3)))
             else:
-                shared.add((m.group(1), m.group(2)))
+                shared.add((m.group(1), m.group(2), m.group(3)))
     return shared, removed, sorted(other)
 
 
@@ -75,20 +77,23 @@ def published_versions(base_stacks, slug):
                   key=listing_rules.version_key)
 
 
-def run(changed, pr_dir, engine, base_stacks=None, no_network=False):
+def run(changed, pr_dir, engine, base_stacks=None, no_network=False, base_libraries=None):
     """(ok, markdown) for a pull request."""
     if base_stacks is None:
         base_stacks = os.path.join(ROOT, 'stacks')
+    if base_libraries is None:
+        base_libraries = os.path.join(os.path.dirname(base_stacks), 'libraries')
+    bases = {'stacks': base_stacks, 'libraries': base_libraries}
     shared, removed, other = classify(changed)
     out = [MARKER, '# The stack check', '']
     if not shared and not removed:
-        out += ['This pull request shares no stack and removes none, so there is nothing to scan. '
+        out += ['This pull request shares no stack or library and removes none, so there is nothing to scan. '
                 'It changes the repository itself, which the Checks workflow tests and an admin reads.', '']
         return True, '\n'.join(out)
     if other:
-        out += ['**This pull request cannot be merged as it is.** It changes stacks and other files '
-                'together. A pull request that shares or removes a stack may change nothing outside '
-                '`stacks/`. The other files:', '']
+        out += ['**This pull request cannot be merged as it is.** It changes stacks or libraries and '
+                'other files together. A pull request that shares or removes a stack or a library '
+                'may change nothing outside `stacks/` and `libraries/`. The other files:', '']
         out += ['- ' + scan.md_code(p) for p in other[:30]]
         if len(other) > 30:
             out.append('- ... and %d more' % (len(other) - 30))
@@ -96,15 +101,20 @@ def run(changed, pr_dir, engine, base_stacks=None, no_network=False):
 
     ok = True
     # (a version with both removed and added files is a changed one)
-    for slug, version in sorted(removed - shared):
-        out += ['- Removes %s version %s. Taking a stack down is an admin\'s decision.'
-                % (scan.md(slug), scan.md(version)), '']
+    for top, slug, version in sorted(removed - shared):
+        out += ['- Removes %s version %s. Taking a %s down is an admin\'s decision.'
+                % (scan.md(slug), scan.md(version), listing_rules.KINDS[top]), '']
     if len(shared) > MAX_STACKS:
-        out += ['**Too many stacks in one pull request** (%d; at most %d).' % (len(shared), MAX_STACKS), '']
+        out += ['**Too many stacks and libraries in one pull request** (%d; at most %d).'
+                % (len(shared), MAX_STACKS), '']
         return False, '\n'.join(out)
-    for slug, version in sorted(shared):
-        before = published_versions(base_stacks, slug)
-        if os.path.isdir(os.path.join(base_stacks, slug, version)):
+    # What the libraries already here answer to, and the ones of this
+    # pull request as each is passed: two libraries cannot share a name
+    taken, names = scan.library_names(base_libraries)
+    for top, slug, version in sorted(shared):
+        kind = listing_rules.KINDS[top]
+        before = published_versions(bases[top], slug)
+        if os.path.isdir(os.path.join(bases[top], slug, version)):
             ok = False
             out += ['## %s, version %s' % (scan.md(slug), scan.md(version)), '',
                     '**This version is already published and cannot be changed.** People may have it '
@@ -116,22 +126,34 @@ def run(changed, pr_dir, engine, base_stacks=None, no_network=False):
             out += ['## %s, version %s' % (scan.md(slug), scan.md(version)), '',
                     '**The version must be higher than %s**, the newest one published.' % before[-1], '']
             continue
-        folder = os.path.join(pr_dir, 'stacks', slug, version)
+        folder = os.path.join(pr_dir, top, slug, version)
         if not os.path.isdir(folder) or os.path.islink(folder):
             ok = False
             out += ['## %s, version %s' % (scan.md(slug), scan.md(version)), '',
                     '**The folder is not in the pull request** as GitHub lists it.', '']
             continue
-        report = scan.scan_folder(folder, engine, no_network)
+        if kind == 'library':
+            # (a new version of a library may keep its own names)
+            mine_taken = {h: s for h, s in taken.items() if s != slug}
+            mine_names = {n: s for n, s in names.items() if s != slug}
+            report = scan.scan_folder(folder, engine, no_network, kind=kind, taken=mine_taken, names=mine_names)
+            if report['ok']:
+                names.setdefault(report['library']['name'].lower(), slug)
+                for h in report['library']['handlers']:
+                    taken.setdefault(h['name'].lower(), slug)
+        else:
+            report = scan.scan_folder(folder, engine, no_network, kind=kind)
         ok = ok and report['ok']
         out.append(scan.markdown(report))
         if report['ok'] and before:
-            out += ['For the reviewer: this is a new version of a stack that is already here '
-                    '(newest so far: %s). Check that it comes from the same author.' % before[-1], '']
-    out.append('**Every stack in this pull request can be shared.** An admin will look at it before it '
-               'is listed.' if ok else
-               '**Something stands in the way** (see above). Change the stack and push again; '
-               'this check runs again by itself.')
+            out += ['For the reviewer: this is a new version of a %s that is already here '
+                    '(newest so far: %s). Check that it comes from the same author.' % (kind, before[-1]), '']
+    tops = {top for top, _, _ in shared}
+    what = 'stack' if tops == {'stacks'} else 'library' if tops == {'libraries'} else 'stack and library'
+    out.append('**Every %s in this pull request can be shared.** An admin will look at it before it '
+               'is listed.' % what if ok else
+               '**Something stands in the way** (see above). Change the %s and push again; '
+               'this check runs again by itself.' % what)
     return ok, '\n'.join(out) + '\n'
 
 

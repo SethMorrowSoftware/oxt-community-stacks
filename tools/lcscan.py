@@ -184,6 +184,68 @@ def defined_handlers(script):
     return names
 
 
+def handlers(script):
+    """[(kind, name, private, line)] for every handler a script defines,
+    in the order they are written. kind is "command" (also for "on"),
+    "function", "getprop", "setprop", "before" or "after"; name is as its
+    author wrote it."""
+    found = []
+    for line, tokens in statements(script):
+        words = list(tokens)
+        private = bool(words) and words[0].kind == 'word' and words[0].text == 'private'
+        if private:
+            words = words[1:]
+        if len(words) >= 2 and words[0].kind == 'word' and words[0].text in _HANDLER_START \
+                and words[1].kind == 'word':
+            kind = 'command' if words[0].text == 'on' else words[0].text
+            found.append((kind, words[1].raw, private, line))
+    return found
+
+
+# The messages the engine itself sends. A library that handles one of
+# these sits in the message path of every stack and sees that message
+# from all of them, which is worth a reviewer's look.
+ENGINE_MESSAGES = frozenset('''
+    startup shutdown shutdownrequest openstack preopenstack closestack closestackrequest
+    opencard preopencard closecard openbackground preopenbackground closebackground
+    opencontrol preopencontrol closecontrol newstack newcard newbackground newbutton
+    newfield newimage newgraphic newplayer newscrollbar newgroup newwidget newtool
+    deletestack deletecard deletebackground deletebutton deletefield deleteimage
+    deletegraphic deleteplayer deletescrollbar deletegroup deletewidget
+    mouseup mousedown mousemove mouseenter mouseleave mousewithin mouserelease
+    mousedoubleup mousedoubledown mousestilldown mousedownincontrol rawkeydown rawkeyup
+    keydown keyup returnkey enterkey tabkey escapekey deletekey backspacekey
+    arrowkey functionkey commandkeydown controlkeydown optionkeydown
+    returninfield enterinfield openfield closefield exitfield textchanged
+    selectionchanged focusin focusout idle resizestack movestack iconifystack
+    uniconifystack resume suspend resumestack suspendstack savestackrequest
+    menupick dragstart dragenter dragleave dragmove dragdrop dragend
+    cutkey copykey pastekey undokey linkclicked nameChanged idchanged
+    librarystack releasestack errordialog scriptparsingerror scriptexecutionerror
+    appleevent socketerror socketclosed sockettimeout urlwakeup
+    touchstart touchmove touchend touchrelease orientationchanged
+    relaunch desktopchanged systemappearancechanged
+'''.lower().split())
+
+
+def message_path_lines(script):
+    """[(line, text)] of the statements that put a script where it gets
+    the messages of every stack: "insert the script of ... into front"
+    or "back", and "start using". Ordinary in a library, which is why
+    only a library is asked."""
+    found = []
+    for line, tokens in statements(script):
+        for clause in _split_clauses(tokens):
+            if clause[0].kind != 'word':
+                continue
+            rest = clause[1:]
+            if (clause[0].text == 'insert' and _has(rest, 'script') and _has(rest, 'front', 'back')) \
+                    or (clause[0].text == 'start' and rest and rest[0].kind == 'word'
+                        and rest[0].text == 'using'):
+                found.append((line, ' '.join(t.raw for t in tokens)[:200]))
+    return found
+
+
 # ---------------------------------------------------------------- the rules
 
 _FILE_SCHEMES = ('file:', 'binfile:', 'resfile:')

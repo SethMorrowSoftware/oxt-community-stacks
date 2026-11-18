@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
-"""Checks one shared stack: its listing, its files and its scripts.
+"""Checks one shared stack, or one shared script library: its listing,
+its files and its scripts.
 
     python3 tools/scan.py stacks/<name>/<version> --engine <OXT-Beyond engine>
         [--json report.json] [--markdown report.md] [--no-network]
+    python3 tools/scan.py libraries/<name>/<version> ...
+
+A library is checked as a stack is, and then as a library (see "a
+library" below): the folder it is in says which of the two it is.
 
 A shared stack is a folder, stacks/<name>/<version>/, that holds
 
@@ -110,6 +115,23 @@ ADVICE = {
                    'with the rest.',
     'suite-not-on-web': 'The web engine has SodiumXT, CoinXT, Box2Dxt and DataChannelXT, and the '
                         'NostrXT relay library. ENetXT, TorrentXT and OnionXT need the desktop.',
+}
+
+# The same for a library, where it differs
+LIBRARY_ADVICE = {
+    'listing': 'Fix listing.json and share the library again.',
+    'files': 'Take the file out. A library brings its one script file, and text or pictures '
+             'that explain it.',
+    'password': 'A library is a script-only stack, a text file. Save it as one and share that.',
+    'externals': 'A shared library cannot load native code.',
+    'unreadable': 'A library is a text file that starts with the line  script "<its name>"  '
+                  'and holds its handlers below it.',
+    'process': 'A shared library cannot start other programs.',
+    'library': 'See the README, "Share a script library", for what a library looks like.',
+    'library-name': 'Change the name on the first line of the file,  script "<name>" . A good '
+                    'name has your own name or your project\'s in it, such as "anna.easing".',
+    'name-taken': 'Two libraries cannot answer to the same name: whichever loaded last would '
+                  'win. Give your handlers a short prefix of their own, such as "ezMove".',
 }
 
 Problem = collections.namedtuple('Problem', 'rule text where line code')
@@ -364,21 +386,258 @@ def _check_stack_files(stack, file_paths, where):
     return problems
 
 
-def scan_folder(folder, engine, no_network=False, suite=None):
-    """The report of one stacks/<name>/<version> folder, a dict (see
-    main() for how it is printed). report['ok'] says whether the stack
-    can be shared. Raises ScanError when the check could not run."""
+# ---------------------------------------------------------------- a library
+
+# A script library is one script-only stack: a text file whose first
+# line is  script "<name>"  and whose handlers other stacks call once it
+# is loaded. It is not played in a box as a stack is: it is installed
+# into the IDE and built into people's own programs. So beyond what a
+# stack is held to, a library must be plain text that anyone can read,
+# may not take a name that is somebody else's, and has its reach into
+# other stacks' messages pointed out to the person who reviews it.
+
+_LIBRARY_NAME = re.compile(r'^[A-Za-z][A-Za-z0-9]*(?:[._-][A-Za-z0-9]+)*$')
+# Names that are the IDE's, the engine's or the xTalk Suite's own
+_RESERVED_NAME_STARTS = ('rev', 'com.livecode.', 'org.openxtalk.', 'community.openxtalk.')
+_RESERVED_NAMES = ('home', 'ide', 'livecode', 'oxt', 'openxtalk', 'help', 'library', 'stack')
+_HEADER = re.compile(r'^\ufeff?\s*script\s+"([^"\r\n]*)"', re.I)
+# What the IDE sends a library when it loads it and when it lets it go
+_LOAD_MESSAGES = ('extensioninitialize', 'extensionfinalize')
+
+# Added by tools/build_site.py to a library that handles neither
+# message itself, when it packs the library for the Extension Manager:
+# the IDE loads a script library by sending it extensionInitialize, and
+# one that does not answer would sit in memory with nobody able to call
+# it. Put at the END, so that nothing above it moves. (The same lines
+# the xTalk Suite and OXT-Beyond add to their own script libraries.)
+LIBRARY_WRAPPER = '''
+-- OXT Community Stacks: added when this library was packed as an
+-- extension. The IDE sends extensionInitialize to a script library when
+-- it loads it, and extensionFinalize when it lets it go.
+on extensionInitialize
+   if the target is not me then
+      pass extensionInitialize
+   end if
+
+   if the long id of me is not among the lines of the backScripts then
+      insert the script of me into back
+   end if
+
+   if the environment contains "development" then
+      set the _ideoverride of me to true
+   end if
+end extensionInitialize
+
+on extensionFinalize
+   if the target is not me then
+      pass extensionFinalize
+   end if
+
+   remove the script of me from back
+end extensionFinalize
+'''
+
+
+def library_name_problem(name):
+    """What is wrong with the name a library gives itself (the name of
+    its script-only stack), or None."""
+    if not 3 <= len(name) <= 60 or not _LIBRARY_NAME.match(name):
+        return ('The library\'s name, "%s", must be 3 to 60 letters and digits, with single dots, '
+                'hyphens or underscores between them and no spaces, such as "anna.easing".' % name[:80])
+    if name.lower().startswith(_RESERVED_NAME_STARTS) or name.lower() in _RESERVED_NAMES:
+        return ('The library\'s name, "%s", begins like the names of OXT-Beyond\'s own stacks and '
+                'libraries, and could be taken for one of them.' % name)
+    return None
+
+
+def public_handlers(script):
+    """[{kind, name, line, text}] of the handlers of a library that other
+    scripts can call: every one that is not private."""
+    lines = script.replace('\r\n', '\n').replace('\r', '\n').split('\n')
+    out = []
+    for kind, name, private, line in lcscan.handlers(script):
+        if not private:
+            text = ' '.join(lines[line - 1].split()) if 0 < line <= len(lines) else name
+            out.append({'kind': kind, 'name': name, 'line': line, 'text': text[:200]})
+    return out
+
+
+def library_names(libraries_dir, skip=None):
+    """What the libraries already listed answer to: ({handler name, lower
+    case: the library's folder name}, {stack name, lower case: folder
+    name}), from the newest version of each. `skip` is the folder name of
+    the library being checked. These are this repository's own files:
+    each library's script is read as text and never run."""
+    taken, names = {}, {}
+    if not os.path.isdir(libraries_dir):
+        return taken, names
+    for slug in sorted(os.listdir(libraries_dir)):
+        base = os.path.join(libraries_dir, slug)
+        if slug == skip or not os.path.isdir(base) or os.path.islink(base):
+            continue
+        versions = [v for v in os.listdir(base) if listing_rules.VERSION.match(v)
+                    and os.path.isdir(os.path.join(base, v))]
+        if not versions:
+            continue
+        folder = os.path.join(base, max(versions, key=listing_rules.version_key))
+        try:
+            with open(os.path.join(folder, 'listing.json'), encoding='utf-8') as f:
+                main = json.load(f).get('main')
+            if not isinstance(main, str) or '/' in main or '\\' in main or main.startswith('.'):
+                continue
+            path = os.path.join(folder, main)
+            if os.path.islink(path) or os.path.getsize(path) > MAX_FILE_BYTES:
+                continue
+            with open(path, encoding='utf-8', errors='replace') as f:
+                text = f.read()
+        except (OSError, ValueError, AttributeError):
+            continue
+        m = _HEADER.match(text)
+        if m:
+            names.setdefault(m.group(1).lower(), slug)
+        for h in public_handlers(text):
+            if h['name'].lower() not in _LOAD_MESSAGES:
+                taken.setdefault(h['name'].lower(), slug)
+    return taken, names
+
+
+def _check_library(folder, listing, files, dumps, suite, taken, names):
+    """(library record or None, [Problem], set of notes) for a folder
+    that is shared as a library."""
+    problems, notes = [], set()
+    stack_files = [f['path'] for f in files if f['kind'] == 'stack']
+    main = (listing or {}).get('main')
+    if len(stack_files) > 1:
+        problems.append(Problem('library', 'A library is one script file. The folder holds %d: %s.'
+                                % (len(stack_files), ', '.join(stack_files[:5])), '', 0, ''))
+    dump = dict(dumps).get(main)
+    if not main or dump is None:
+        return None, problems, notes
+    stack = dump[0]
+    scripted = [o for o in stack['objects'] if o['script'].strip()]
+    if len(dump) > 1 or not stack['scriptOnly'] or [o['type'] for o in scripted] != ['stack']:
+        problems.append(Problem('library', 'The library must be a script-only stack: a text file with '
+                                'one script and no cards, buttons or substacks of its own.', main, 0, ''))
+        return None, problems, notes
+    with open(os.path.join(folder, main), 'rb') as f:
+        data = f.read()
+    try:
+        text = data.decode('utf-8')
+    except UnicodeError:
+        problems.append(Problem('library', 'The library\'s file is not UTF-8 text.', main, 0, ''))
+        return None, problems, notes
+    m = _HEADER.match(text)
+    if not m or m.group(1) != stack['name']:
+        problems.append(Problem('unreadable', 'The library\'s file does not start with the line  '
+                                'script "<its name>" .', main, 0, ''))
+        return None, problems, notes
+
+    name = stack['name']
+    wrong = library_name_problem(name)
+    if wrong:
+        problems.append(Problem('library-name', wrong, main, 1, ''))
+    elif name.lower() in names:
+        problems.append(Problem('library-name', 'The library\'s name, "%s", is the name of a library that '
+                                'is already here ("%s").' % (name, names[name.lower()]), main, 1, ''))
+
+    script = scripted[0]['script']
+    handlers = public_handlers(script)
+    loads = {h['name'].lower() for h in handlers} & set(_LOAD_MESSAGES)
+    if len(loads) == 1:
+        problems.append(Problem('library', 'The library handles only one of extensionInitialize and '
+                                'extensionFinalize. Handle both, or neither: the gallery adds the usual '
+                                'pair to a library that has neither.', main, 0, ''))
+    offered, messages = [], []
+    for h in handlers:
+        low = h['name'].lower()
+        if low in _LOAD_MESSAGES:
+            continue
+        # (the line in the file: the script starts below its first line)
+        where_line = h['line'] + 1
+        if low in lcscan.ENGINE_MESSAGES:
+            messages.append(h['name'])
+            continue
+        offered.append(h)
+        owner = suite.get(low)
+        if owner:
+            problems.append(Problem('name-taken', 'The library\'s handler "%s" has the name of a handler '
+                                    'of the xTalk Suite (%s), which comes with OXT-Beyond.'
+                                    % (h['name'], owner[0]), main, where_line, h['text']))
+        elif low in taken:
+            problems.append(Problem('name-taken', 'The library\'s handler "%s" has the name of a handler '
+                                    'of a library that is already here ("%s").'
+                                    % (h['name'], taken[low]), main, where_line, h['text']))
+    if not [h for h in offered if h['kind'] in ('command', 'function')]:
+        problems.append(Problem('library', 'The library has no command or function that other scripts '
+                                'can call. (A private handler can only be called from inside it.)',
+                                main, 0, ''))
+    if messages:
+        notes.add('catches-messages')
+    if lcscan.message_path_lines(script):
+        notes.add('message-path')
+    record = {'name': name, 'file': main, 'handlers': offered, 'messages': sorted(set(messages), key=str.lower),
+              'wrapped': not loads}
+    return record, problems, notes
+
+
+def library_package(folder, report):
+    """The files of a checked library as the Extension Manager takes
+    them, [(path in the package, bytes)], manifest.xml first: the
+    manifest, the library (with LIBRARY_WRAPPER added when it handles
+    neither of the IDE's two messages) and whatever text and pictures
+    came with it. `report` is scan_folder()'s for the folder, and must
+    be one that can be shared."""
+    library, listing = report['library'], report['listing']
+
+    def x(text):
+        return (str(text).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+                .replace('"', '&quot;'))
+
+    manifest = '\n'.join([
+        '<package version="0.0">',
+        '  <name>%s</name>' % x(library['name']),
+        '  <title>%s</title>' % x(listing['title']),
+        '  <author>%s</author>' % x(listing['author']),
+        '  <version>%s</version>' % x(report['version']),
+        '  <type>library</type>',
+        '  <license>community</license>',
+        '</package>']) + '\n'
+    out = [('manifest.xml', manifest.encode('utf-8'))]
+    for f in sorted(report['files'], key=lambda f: f['path']):
+        if f['kind'] == 'listing' or f['path'].lower() == 'manifest.xml':
+            continue
+        with open(os.path.join(folder, *f['path'].split('/')), 'rb') as src:
+            data = src.read()
+        if f['path'] == library['file'] and library['wrapped']:
+            if not data.endswith(b'\n'):
+                data += b'\n'
+            data += LIBRARY_WRAPPER.encode('ascii')
+        out.append((f['path'], data))
+    return out
+
+
+def scan_folder(folder, engine, no_network=False, suite=None, kind=None, taken=None, names=None):
+    """The report of one stacks/<name>/<version> or libraries/<name>/
+    <version> folder, a dict (see main() for how it is printed).
+    report['ok'] says whether it can be shared. `kind` is "stack" or
+    "library"; left out, the folder two above says which. `taken` and
+    `names` are library_names() of the libraries already listed. Raises
+    ScanError when the check could not run."""
     folder = os.path.abspath(folder)
     if suite is None:
         suite = lcscan.load_suite()
     version = os.path.basename(folder)
     slug = os.path.basename(os.path.dirname(folder))
-    report = {'format': 1, 'slug': slug, 'version': version, 'ok': False, 'listing': None,
+    if kind is None:
+        kind = listing_rules.KINDS.get(os.path.basename(os.path.dirname(os.path.dirname(folder))), 'stack')
+    if kind not in listing_rules.FOLDERS:
+        raise ScanError('%r is not a kind of thing that is shared here' % (kind,))
+    report = {'format': 1, 'kind': kind, 'slug': slug, 'version': version, 'ok': False, 'listing': None,
               'files': [], 'stacks': [], 'uses': [], 'problems': [], 'notes': [], 'findings': []}
     problems = []
     sources = []          # (file, stack name, label, script): for the source page
 
-    for text in listing_rules.check_path(slug, version):
+    for text in listing_rules.check_path(slug, version, kind):
         problems.append(Problem('listing', text, '', 0, ''))
     if not os.path.isdir(folder):
         raise ScanError('%s is not a folder' % folder)
@@ -394,7 +653,7 @@ def scan_folder(folder, engine, no_network=False, suite=None):
         if not any(p.where == 'listing.json' for p in problems):
             problems.append(Problem('listing', 'There is no listing.json in the folder.', '', 0, ''))
     else:
-        listing, texts = listing_rules.read(listing_path, paths)
+        listing, texts = listing_rules.read(listing_path, paths, kind)
         problems += [Problem('listing', t, 'listing.json', 0, '') for t in texts]
     report['listing'] = listing
 
@@ -456,10 +715,19 @@ def scan_folder(folder, engine, no_network=False, suite=None):
             problems.append(Problem('listing', '"main" must name the stack file to open.',
                                     'listing.json', 0, ''))
 
+    if kind == 'library':
+        report['library'] = None
+        if not file_problems:
+            report['library'], library_problems, library_notes = _check_library(
+                folder, listing, files, dumps, suite, taken or {}, names or {})
+            problems += library_problems
+            notes |= library_notes
+
     uses, refused, note_rules = lcscan.summarize(findings)
     for f in findings:
         if f.level == 'refuse':
-            problems.append(Problem(f.rule, 'The stack %s.' % lcscan.RULES[f.rule][1], f.where, f.line, f.text))
+            problems.append(Problem(f.rule, 'The %s %s.' % (kind, lcscan.RULES[f.rule][1]),
+                                    f.where, f.line, f.text))
     notes |= set(note_rules)
     if 'internet' in uses and notes & {'do', 'value', 'set-script', 'send'}:
         notes.add('could-fetch-script')
@@ -483,6 +751,10 @@ USES_WORDS = collections.OrderedDict([
 NOTE_WORDS = dict((rule, text[1]) for rule, text in lcscan.RULES.items() if text[0] == 'note')
 NOTE_WORDS['could-fetch-script'] = ('uses the internet and builds script while it runs: it could '
                                     'fetch script that was not checked here')
+NOTE_WORDS['catches-messages'] = ('handles messages that the engine sends, and will get them from every '
+                                  'stack once it is loaded')
+NOTE_WORDS['message-path'] = ('puts a script where it gets the messages of every stack (start using, '
+                              'insert script)')
 
 
 def md(text):
@@ -510,11 +782,13 @@ def markdown(report):
     Everything that came out of the folder goes through md() or
     md_code()."""
     title = (report['listing'] or {}).get('title') or report['slug']
+    kind = report.get('kind', 'stack')
+    advice = dict(ADVICE, **LIBRARY_ADVICE) if kind == 'library' else ADVICE
     out = ['## %s, version %s' % (md(title), md(report['version'])), '']
     if report['ok']:
-        out.append('**This stack can be shared.**')
+        out.append('**This %s can be shared.**' % kind)
     else:
-        out.append('**This stack cannot be shared yet.** What stands in the way:')
+        out.append('**This %s cannot be shared yet.** What stands in the way:' % kind)
         out.append('')
         seen = set()
         for p in report['problems']:
@@ -524,17 +798,28 @@ def markdown(report):
             if p['code']:
                 line += '\n  ' + md_code(p['code'])
             out.append(line)
-            if p['rule'] in ADVICE and p['rule'] not in seen:
+            if p['rule'] in advice and p['rule'] not in seen:
                 seen.add(p['rule'])
-                out.append('  ' + ADVICE[p['rule']])
+                out.append('  ' + advice[p['rule']])
     out.append('')
     if report['uses']:
         out.append('What it uses: ' + ', '.join(USES_WORDS[u] for u in report['uses']) + '.')
     elif report['ok']:
         out.append('It uses nothing outside itself: no internet, no files.')
+    library = report.get('library')
+    if library:
+        out += ['', 'The library calls itself %s and offers %d handler%s to other scripts: %s.' % (
+            md_code(library['name']), len(library['handlers']), '' if len(library['handlers']) == 1 else 's',
+            ', '.join(md_code(h['name']) for h in library['handlers'][:60])
+            + (' and %d more' % (len(library['handlers']) - 60) if len(library['handlers']) > 60 else ''))]
+        out += ['', 'A library is not played in a box as a stack is: people install it and build it into '
+                'their own programs. Read all of it before it is listed.']
     if report['notes']:
         out += ['', 'For the reviewer:']
         out += ['- It ' + NOTE_WORDS[n] + '.' for n in report['notes']]
+        if library and library['messages']:
+            out.append('- The engine\'s messages it handles: %s.'
+                       % ', '.join(md_code(m) for m in library['messages'][:40]))
     uses = [f for f in report['findings'] if f['level'] != 'refuse']
     if uses:
         out += ['', '<details><summary>The lines these come from (%d)</summary>' % len(uses), '']
@@ -554,8 +839,8 @@ def markdown(report):
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description='Check one shared stack.')
-    parser.add_argument('folder', help='stacks/<name>/<version>')
+    parser = argparse.ArgumentParser(description='Check one shared stack or library.')
+    parser.add_argument('folder', help='stacks/<name>/<version> or libraries/<name>/<version>')
     parser.add_argument('--engine', default=os.environ.get('OXT_ENGINE'),
                         help='the OXT-Beyond engine (LiveCode-Community); or set OXT_ENGINE')
     parser.add_argument('--json', help='write the whole report here')
@@ -564,7 +849,12 @@ def main(argv=None):
                         help='run the engine with no network (Linux; needs root or sudo)')
     args = parser.parse_args(argv)
     try:
-        report = scan_folder(args.folder, args.engine, args.no_network)
+        folder = os.path.abspath(args.folder)
+        taken = names = None
+        above = os.path.dirname(os.path.dirname(folder))
+        if os.path.basename(above) == 'libraries':
+            taken, names = library_names(above, skip=os.path.basename(os.path.dirname(folder)))
+        report = scan_folder(folder, args.engine, args.no_network, taken=taken, names=names)
     except ScanError as e:
         print('The check could not run: %s' % e, file=sys.stderr)
         return 2

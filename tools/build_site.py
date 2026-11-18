@@ -24,6 +24,15 @@ What it writes:
                                     signing key is there (tools/sign.py)
     player/                         OXT-Beyond's Stack Player
 
+and for the script libraries of libraries/ (below, "libraries"):
+
+    libraries.html                  the list of them
+    l/<name>/index.html             a library's own page
+    l/<name>/<version>/<name>-<version>.lce    the library, as the
+                                    Extension Manager installs it
+    l/<name>/<version>/source.html  its script, to read
+    libraries.json, libraries.sig   the list for the IDE, and its signature
+
 How a stack is kept in its box. The stack plays in OXT-Beyond's Stack
 Player, in a frame that the page marks sandbox="allow-scripts ..."
 without allow-same-origin. The browser then treats the frame as a site of
@@ -38,6 +47,15 @@ no address at which a stack runs as this site.
 Nothing a stack brings is ever served as a page of this site: its files
 go into one .zip, and the pictures are served under names made here.
 Every word that came from a listing or a script is escaped.
+
+A library has no box. It is made to be installed into the IDE and built
+into people's own programs, where it runs as they do. Nothing of a
+library ever runs on this site: its page shows what it offers and every
+line of it, and hands out one package. What keeps people safe there is
+that the script is plain text which the checker and a person have read,
+that the package is made here from that text, and that its page says
+plainly what installing means. A library may name a stack of the
+gallery as its demo; that stack plays in the box as any other does.
 """
 import argparse
 import html
@@ -160,7 +178,8 @@ def collect(stacks_dir, engine, no_network=False, log=print):
 
 # ---------------------------------------------------------------- pages
 
-NAV = [('index.html', 'All stacks'), ('safety.html', 'Is it safe?'), ('share.html', 'Share a stack')]
+NAV = [('index.html', 'All stacks'), ('libraries.html', 'Libraries'), ('safety.html', 'Is it safe?'),
+       ('share.html', 'Share a stack')]
 
 
 def page(title, body, root='', description='', here=None):
@@ -542,7 +561,10 @@ def play_page(e):
 ''' % {'title': esc(e['title']), 'author': esc(e['author']), 'root': root, 'sandbox': SANDBOX, 'frame': esc(frame)}
 
 
-def source_page(e, version, sources):
+def source_page(e, version, sources, kind='stack', added=''):
+    """Every script of one version, with a number on each line. `added`
+    is script the gallery itself adds to a library's package, shown
+    apart from the author's."""
     root = '../../../'
     parts, toc = [], []
     for i, (file, stack, label, script) in enumerate(sources):
@@ -555,18 +577,276 @@ def source_page(e, version, sources):
                    % (source_anchor(i), esc(label), esc(stack), len(lines)))
     if not parts:
         parts.append('<p>This stack has no scripts.</p>')
+    if added:
+        parts.append('<section id="added"><h2>Added by the gallery</h2><p class="small">The package ends with '
+                     'these lines, which this library did not have: they let the Extension Manager load '
+                     'the library and let it go. They are the same for every library.</p><pre>%s</pre></section>'
+                     % esc(added.strip('\n')))
     contents = ''
     if len(toc) > 1:
         contents = '<details class="toc" open><summary>%d scripts in this stack</summary><ol>%s</ol></details>' % (
             len(toc), ''.join(toc))
-    body = '''<nav class="crumbs" aria-label="Breadcrumb"><a href="%s">All stacks</a> <span aria-hidden="true">/</span> <a href="../index.html">%s</a> <span aria-hidden="true">/</span> <span aria-current="page">Scripts</span></nav>
+    if kind == 'library':
+        top, top_words = root + 'libraries.html', 'Libraries'
+        words = ('This is the script exactly as its author shared it, and as it is in the package this '
+                 'site hands out.')
+        heading = 'The script of %s' % esc(e['title'])
+    else:
+        top, top_words = root + 'index.html', 'All stacks'
+        words = 'These are the scripts exactly as they are in the stack that plays here.'
+        heading = 'The scripts of %s' % esc(e['title'])
+    body = '''<nav class="crumbs" aria-label="Breadcrumb"><a href="%s">%s</a> <span aria-hidden="true">/</span> <a href="../index.html">%s</a> <span aria-hidden="true">/</span> <span aria-current="page">Scripts</span></nav>
 <article class="source">
-<h1>The scripts of %s</h1>
-<p>Version %s. These are the scripts exactly as they are in the stack that plays here. Each line has its number, and a link to a line keeps it.</p>
+<h1>%s</h1>
+<p>Version %s. %s Each line has its number, and a link to a line keeps it.</p>
 %s
 %s
-</article>''' % (root + 'index.html', esc(e['title']), esc(e['title']), esc(version), contents, '\n'.join(parts))
+</article>''' % (top, top_words, esc(e['title']), heading, esc(version), words, contents, '\n'.join(parts))
     return page('Scripts of %s - OXT Community Stacks' % e['title'], body, root)
+
+
+# ---------------------------------------------------------------- libraries
+
+LIBRARY_BADGES = [
+    ('internet', 'Uses the internet', 'It gets or sends information over the internet.'),
+    ('files', 'Opens or saves files', 'It reads or writes files on the computer it runs on.'),
+    ('javascript', 'Runs JavaScript', 'It runs JavaScript, which only works in a stack that plays on the web.'),
+]
+
+
+def collect_libraries(libraries_dir, engine, no_network=False, log=print):
+    """(libraries, refused), as collect() gives them for stacks. A
+    library whose names are another's (one that comes before it by its
+    folder's name) is refused: two libraries cannot answer to one name."""
+    libraries, refused = {}, []
+    taken, names = {}, {}
+    by_slug = {}
+    for slug, version, folder in find_versions(libraries_dir):
+        by_slug.setdefault(slug, []).append((version, folder))
+    for slug in sorted(by_slug):
+        for version, folder in by_slug[slug]:
+            report = scan.scan_folder(folder, engine, no_network, kind='library', taken=taken, names=names)
+            if not report['ok']:
+                refused.append((slug, version, report))
+                log('::warning::library %s %s is left out: %s' % (slug, version, report['problems'][0]['text']))
+                continue
+            report['folder'] = folder
+            libraries.setdefault(slug, []).append(report)
+        if slug in libraries:
+            libraries[slug].sort(key=lambda r: listing_rules.version_key(r['version']), reverse=True)
+            newest = libraries[slug][0]['library']
+            names.setdefault(newest['name'].lower(), slug)
+            for h in newest['handlers']:
+                taken.setdefault(h['name'].lower(), slug)
+    return libraries, refused
+
+
+def make_package(entries):
+    """The bytes of a library's .lce package from [(path, bytes)]: a
+    .zip with manifest.xml first (the Extension Manager wants it there),
+    the same bytes for the same files every time."""
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, 'w', zipfile.ZIP_DEFLATED) as z:
+        for path, data in entries:
+            info = zipfile.ZipInfo(path, date_time=(1980, 1, 1, 0, 0, 0))
+            info.compress_type = zipfile.ZIP_DEFLATED
+            info.external_attr = 0o644 << 16
+            z.writestr(info, data)
+    return buffer.getvalue()
+
+
+def library_entry_of(slug, versions, stack_slugs, log=print):
+    """A library's line of libraries.json, from its checked versions
+    (newest first). `stack_slugs` are the stacks the gallery plays: a
+    demo is only named when it is one of them."""
+    latest = versions[0]
+    listing, library = latest['listing'], latest['library']
+    entry = {'slug': slug, 'title': listing['title'], 'author': listing['author'],
+             'description': listing['description'], 'licence': listing['licence'],
+             'tags': listing.get('tags', []), 'uses': latest['uses'], 'notes': latest['notes'],
+             'version': latest['version'], 'name': library['name'], 'main': library['file'],
+             'handlers': [{'kind': h['kind'], 'name': h['name'], 'text': h['text']} for h in library['handlers']],
+             'messages': library['messages'],
+             'page': 'l/%s/index.html' % slug,
+             'script_lines': sum(st['script_lines'] for st in latest['stacks']),
+             'versions': [],
+             '_dev': {'findings': latest.get('findings', []), 'sources': latest.get('_sources', [])}}
+    demo = listing.get('demo')
+    if demo and demo in stack_slugs:
+        entry['demo'] = demo
+    elif demo:
+        log('::warning::library %s: its demo "%s" is not a stack of the gallery, so the page has no Play'
+            % (slug, demo))
+    for report in versions:
+        base = 'l/%s/%s/' % (slug, report['version'])
+        entry['versions'].append({
+            'version': report['version'], 'name': report['library']['name'], 'uses': report['uses'],
+            'download': base + '%s-%s.lce' % (slug, report['version']),
+            'source': base + 'source.html'})
+    return entry
+
+
+def library_card_html(e):
+    return '''<li class="card lib" data-find="%(find)s" data-tags="%(tags)s">
+  <div class="body">
+    <h3><a href="%(page)s">%(title)s</a></h3>
+    <p class="by">by %(author)s</p>
+    <p class="what">%(description)s</p>
+    %(badges)s
+  </div>
+</li>''' % {'page': e['page'], 'title': esc(e['title']), 'author': esc(e['author']),
+            'description': esc(first_sentence(e['description'])), 'badges': badges_html(e['uses']),
+            'tags': esc('|'.join(e['tags'])),
+            'find': esc(' '.join([e['title'], e['author'], e['description'], e['name']] + e['tags']
+                                 + [h['name'] for h in e['handlers']]).lower())}
+
+
+def libraries_page(entries):
+    intro = '''<section class="hero">
+  <h1>Script libraries to build with</h1>
+  <p>A library is a script that gives your own stacks new commands and functions. These were shared by the people who wrote them, for anyone to use.</p>
+</section>
+<p class="note"><b>A library is not a stack you play.</b> You install it into <a href="%(oxt)s">OXT-Beyond</a>, where it runs on your computer as any program does: there is no box around it. Every line of each library is here to read, a checker and a person have read it before it was listed, and its page says what it reaches for. Install libraries only from people you trust. <a href="safety.html#libraries">More about this.</a></p>''' % {'oxt': OXT_URL}
+    if not entries:
+        body = intro + '''
+<p>No library has been shared yet. <a href="share-library.html">Be the first to share one.</a></p>'''
+        return page('Libraries - OXT Community Stacks', body, here='libraries.html')
+    body = intro + '''
+<p class="count">%(total)d %(noun)s. <a href="share-library.html">Share one you wrote.</a></p>
+<h2 class="sr">The libraries</h2>
+<ul class="cards libs" id="libs">
+%(cards)s
+</ul>''' % {'total': len(entries), 'noun': 'library' if len(entries) == 1 else 'libraries',
+           'cards': '\n'.join(library_card_html(e) for e in entries)}
+    return page('Libraries - OXT Community Stacks', body,
+                description='Script libraries for OXT-Beyond, shared by the people who wrote them.',
+                here='libraries.html')
+
+
+def library_page(e):
+    root = '../../'
+    meanings = ''.join('<li><b>%s.</b> %s</li>' % (esc(words), esc(meaning))
+                       for key, words, meaning in LIBRARY_BADGES if key in e['uses'])
+    if not meanings:
+        meanings = '<li><b>Keeps to itself.</b> The checker found no internet and no files in it.</li>'
+    if e['messages']:
+        meanings += ('<li><b>Listens to every stack.</b> It handles messages that the engine sends (%s), and '
+                     'gets them from every stack while it is loaded.</li>'
+                     % ', '.join('<code>%s</code>' % esc(m) for m in e['messages'][:20]))
+    notes = [n for n in e['notes'] if n in ('do', 'send', 'value', 'set-script', 'could-fetch-script')]
+    if notes:
+        meanings += ('<li><b>Builds script as it runs.</b> The checker cannot follow script that is put '
+                     'together while a program runs, so its labels may say less than the library does.</li>')
+    rows = ['<li><code>%s</code></li>' % esc(h['text'] or h['name']) for h in e['handlers']]
+    older = ''
+    if len(e['versions']) > 1:
+        older = '<h2>Earlier versions</h2><ul class="plain">%s</ul>' % ''.join(
+            '<li>Version %s: <a href="%s%s" download>download</a>, <a href="%s%s">script</a></li>'
+            % (esc(v['version']), root, url(v['download']), root, url(v['source']))
+            for v in e['versions'][1:])
+    demo = ''
+    if e.get('demo'):
+        demo = ('<a class="play big" href="%ss/%s/play.html"><span aria-hidden="true">&#9654;</span> '
+                'Try the demo</a>' % (root, e['demo']))
+    paragraphs = ''.join('<p>%s</p>' % esc(p) for p in e['description'].split('\n') if p.strip())
+    report = '%s/issues/new?title=%s' % (REPOSITORY_URL, urllib.parse.quote('Report: library ' + e['slug']))
+    body = '''<nav class="crumbs" aria-label="Breadcrumb"><a href="%(root)slibraries.html">Libraries</a> <span aria-hidden="true">/</span> <span aria-current="page">%(title)s</span></nav>
+<article class="stack library">
+  <div class="intro">
+    <h1>%(title)s</h1>
+    <p class="by">a script library by %(author)s</p>
+    %(badges)s
+    <div class="actions">
+      %(demo)s
+      <a class="ghost" href="%(root)s%(source)s">Read the script</a>
+    </div>
+    %(demohint)s
+  </div>
+  <div class="cols">
+    <div class="main-col">
+      <h2>About this library</h2>
+      <div class="about">%(paragraphs)s</div>
+      <h2>What it gives your scripts</h2>
+      <ul class="lines">%(rows)s</ul>
+      <h2>What this library uses</h2>
+      <ul class="plain">%(meanings)s</ul>
+      <h2>Install it in OXT-Beyond</h2>
+      <p class="note">An installed library runs on your computer as any program does, every time OXT-Beyond starts, and in every program you build with it. There is no box around it. <a href="%(root)s%(source)s">Read the script</a> first, and install libraries only from people you trust.</p>
+      <ol class="three">
+        <li><a class="ghost" href="%(root)s%(download)s" download>Download it (%(size)s)</a> Leave the file as it is: do not unzip it.</li>
+        <li>In <a href="%(oxt)s">OXT-Beyond</a>, choose <b>Tools &gt; Extension Manager</b>, click <b>+</b> and choose the file.</li>
+        <li>Call its handlers from your own scripts. To take it out again, select it in the Extension Manager and remove it.</li>
+      </ol>
+      <p class="small">The file is an extension package (<code>.lce</code>) that this site made from the script on this page. Any IDE built on LiveCode Community 9 installs it the same way. To put the library into a program you build, tick it under <b>Inclusions</b> in the Standalone Application Settings.</p>
+      %(older)s
+    </div>
+    <aside class="facts" aria-label="Facts">
+      <dl>
+        <dt>Made by</dt><dd>%(author)s</dd>
+        <dt>Version</dt><dd>%(version)s</dd>
+        <dt>Licence</dt><dd>%(licence)s</dd>
+        <dt>Its name in scripts</dt><dd><code>%(name)s</code></dd>
+        <dt>Script</dt><dd>%(lines)s lines</dd>
+        <dt>Download</dt><dd>%(size)s</dd>
+        %(tags)s
+      </dl>
+      <p class="small">%(licencenote)s</p>
+      <p class="small"><a href="%(report)s">Report a problem with this library</a>, or tell us on the <a href="%(forum)s">OpenXTalk forum</a>.</p>
+    </aside>
+  </div>
+</article>''' % {
+        'title': esc(e['title']), 'author': esc(e['author']), 'badges': badges_html(e['uses']),
+        'paragraphs': paragraphs, 'meanings': meanings, 'root': root, 'source': url(e['source']),
+        'download': url(e['download']), 'lines': e['script_lines'], 'size': human_size(e['size']),
+        'version': esc(e['version']), 'licence': esc(listing_rules.LIBRARY_LICENCES[e['licence']]),
+        'name': esc(e['name']), 'rows': ''.join(rows), 'older': older, 'demo': demo,
+        'demohint': ('<p class="small">The demo is a stack that uses this library. It plays right here in your '
+                     'browser, boxed in, so trying it puts nothing on your computer.</p>') if demo else '',
+        'tags': '<dt>Tags</dt><dd>%s</dd>' % ''.join(esc(t) + ' ' for t in e['tags']).strip() if e['tags'] else '',
+        'licencenote': ('A program built with OXT-Beyond holds its GPL 3 engine, so the program as a whole is '
+                        'shared under GPL 3, whatever the licence of a library inside it.'),
+        'report': esc(report), 'forum': FORUM_URL, 'oxt': OXT_URL}
+    return page('%s - OXT Community Stacks' % e['title'], body, root, first_sentence(e['description']))
+
+
+def build_libraries(libraries_dir, engine, out, stack_slugs, no_network=False, log=print):
+    """Writes the libraries' pages and packages into `out`. Returns
+    (the list as libraries.json holds it, refused)."""
+    libraries, refused = collect_libraries(libraries_dir, engine, no_network, log)
+    entries = []
+    for slug in sorted(libraries):
+        versions = libraries[slug]
+        entry = library_entry_of(slug, versions, stack_slugs, log)
+        for report, record in zip(versions, entry['versions']):
+            files = scan.library_package(report['folder'], report)
+            data = make_package(files)
+            target = os.path.join(out, *record['download'].split('/'))
+            os.makedirs(os.path.dirname(target), exist_ok=True)
+            with open(target, 'wb') as f:
+                f.write(data)
+            record['size'] = len(data)
+            record['sha256'] = scan.hashlib.sha256(data).hexdigest()
+            # (what is in the package, by the bytes it holds)
+            record['files'] = [{'path': path, 'size': len(content),
+                                'sha256': scan.hashlib.sha256(content).hexdigest()} for path, content in files]
+            write(os.path.join(out, *record['source'].split('/')),
+                  source_page(entry, report['version'], report['_sources'], 'library',
+                              scan.LIBRARY_WRAPPER if report['library']['wrapped'] else ''))
+        latest = entry['versions'][0]
+        entry.update({'download': latest['download'], 'source': latest['source'], 'size': latest['size'],
+                      'sha256': latest['sha256']})
+        entries.append(entry)
+    entries.sort(key=lambda e: (e['title'].lower(), e['slug']))
+    for entry in entries:
+        write(os.path.join(out, 'l', entry['slug'], 'index.html'), library_page(entry))
+    write(os.path.join(out, 'libraries.html'), libraries_page(entries))
+    listed = []
+    for e in entries:
+        item = dict(e)
+        item.pop('notes')
+        item.pop('_dev')
+        listed.append(item)
+    return listed, refused
 
 
 # ---------------------------------------------------------------- building
@@ -641,9 +921,13 @@ def static_page(name, root=''):
                 .replace('@OXT@', OXT_URL), root, here=here)
 
 
-def build(stacks_dir, engine, player, out, no_network=False, strict=False, log=print, env=None):
+def build(stacks_dir, engine, player, out, no_network=False, strict=False, log=print, env=None,
+          libraries_dir=None):
     """Builds the site into `out` (which must not exist or be empty).
-    Returns (index, refused)."""
+    Returns (index, refused). The libraries are those of `libraries_dir`
+    (left out: the folder "libraries" beside the stacks' folder)."""
+    if libraries_dir is None:
+        libraries_dir = os.path.join(os.path.dirname(os.path.abspath(stacks_dir)), 'libraries')
     if os.path.exists(out) and os.listdir(out):
         raise BuildError('%s is not empty' % out)
     os.makedirs(out, exist_ok=True)
@@ -692,7 +976,7 @@ def build(stacks_dir, engine, player, out, no_network=False, strict=False, log=p
     for entry in entries:
         write(os.path.join(out, 's', entry['slug'], 'index.html'), stack_page(entry, entries))
     write(os.path.join(out, 'index.html'), gallery_page(entries))
-    for name in ('safety.html', 'share.html', '404.html'):
+    for name in ('safety.html', 'share.html', 'share-library.html', '404.html'):
         write(os.path.join(out, name), static_page(name))
     shutil.copytree(os.path.join(SITE_ASSETS, 'assets'), os.path.join(out, 'assets'))
     write(os.path.join(out, '.nojekyll'), '')
@@ -708,13 +992,25 @@ def build(stacks_dir, engine, player, out, no_network=False, strict=False, log=p
     text = json.dumps(index, indent=1, sort_keys=True, ensure_ascii=True) + '\n'
     write(os.path.join(out, 'index.json'), text)
 
+    # The libraries, in a list of their own: the list of stacks stays
+    # what the IDEs already out there read
+    listed, refused_libraries = build_libraries(libraries_dir, engine, out, {e['slug'] for e in entries},
+                                                no_network, log)
+    if strict and refused_libraries:
+        raise BuildError('%d librar(ies) were refused' % len(refused_libraries))
+    refused = refused + refused_libraries
+    libraries = {'format': 1, 'name': 'OXT Community Libraries', 'libraries': listed}
+    libraries_text = json.dumps(libraries, indent=1, sort_keys=True, ensure_ascii=True) + '\n'
+    write(os.path.join(out, 'libraries.json'), libraries_text)
+
     seed = sign.secret_seed(env)
     public = sign.read_public()
     if seed is not None:
         if public is None or sign.ed25519.public_key(seed) != public:
             raise BuildError('the signing key is not the one signing-key.pub names')
         write(os.path.join(out, 'index.sig'), sign.sign_bytes(seed, text.encode('utf-8')) + '\n')
-        log('index.json is signed')
+        write(os.path.join(out, 'libraries.sig'), sign.sign_bytes(seed, libraries_text.encode('utf-8')) + '\n')
+        log('index.json and libraries.json are signed')
     else:
         # (the Publish workflow signs in a job of its own, which is the
         # only one that holds the key)
@@ -736,7 +1032,10 @@ def main(argv=None):
     except (BuildError, scan.ScanError, sign.KeyError_) as e:
         print('The site could not be built: %s' % e, file=sys.stderr)
         return 2
-    print('%d stack(s) in the gallery, %d left out' % (len(index['stacks']), len(refused)))
+    with open(os.path.join(args.out, 'libraries.json'), encoding='utf-8') as f:
+        libraries = json.load(f)['libraries']
+    print('%d stack(s) and %d librar(ies) in the gallery, %d left out'
+          % (len(index['stacks']), len(libraries), len(refused)))
     return 0
 
 

@@ -1,0 +1,25 @@
+Share a script library - OXT Community Stacks
+<article class="doc">
+<h1>Share a script library you wrote</h1>
+<p>A script library gives other people's stacks new commands and functions. If you wrote one that others could use, it can be listed on the <a href="libraries.html">Libraries</a> page, where people can read it and install it into OXT-Beyond.</p>
+<h2>What you need</h2>
+<ul>
+<li>Your library as a <b>script-only stack</b>: one text file whose name ends in <code>.livecodescript</code> and whose first line is <code>script "your.library.name"</code>. Choose a name of your own, with no spaces, such as <code>anna.easing</code>.</li>
+<li>Handler names that are yours alone. Start each with a short prefix, such as <code>ezMove</code>: two libraries cannot both have a handler called <code>move</code>.</li>
+<li>A title, your name as you want it shown, and a sentence or two about what the library is for.</li>
+<li>A licence: <b>GPL 3</b>, or one of the short licences that can be used together with it (MIT, BSD, Apache 2.0 or LGPL 3). Whichever you choose, a program built with OXT-Beyond holds its GPL 3 engine and is shared under GPL 3 as a whole.</li>
+<li>If you can, a <b>demo</b>: a stack that uses your library, shared in the gallery like any other stack. People can then try your library in their browser before they install it.</li>
+</ul>
+<h2>What makes a library work here</h2>
+<ul>
+<li>Plain script only: no native code, no <code>shell</code>, no starting other programs.</li>
+<li>Using the internet and files is fine. The library's page will say so.</li>
+<li>If it handles messages that the engine sends, such as <code>openStack</code> or <code>keyDown</code>, pass them on (<code>pass openStack</code>). A library gets these from every stack.</li>
+</ul>
+<h2>How to send it</h2>
+<ol class="steps">
+<li><b>On the forum.</b> Attach the library file to a post on the <a href="@FORUM@">OpenXTalk forum</a>, with its title, your name, what it does and the licence you choose. We will do the rest.</li>
+<li><b>If you use GitHub:</b> add a folder <code>libraries/your-library-name/1.0/</code> with your library and a <code>listing.json</code> to <a href="@REPOSITORY@">the stacks repository</a>, in a pull request. The repository's README shows how.</li>
+</ol>
+<p class="small">A person reads every library before it is listed, usually within a few days. <a href="safety.html#libraries">Why a library is looked at more closely than a stack.</a></p>
+</article>

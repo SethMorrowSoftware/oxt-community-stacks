@@ -70,6 +70,48 @@ Before merging:
 To take a stack down, remove its folder in a pull request (or straight
 on main) and Publish rebuilds the gallery without it.
 
+## Reviewing a library
+
+A library (`libraries/<name>/<version>/`) takes the same path as a
+stack: a pull request, Scan, Checks, a review, Publish. The review
+matters more, because **nothing boxes a library in**. People install it
+into their IDE and build it into their own programs. What stands in for
+the box is that the library is plain text, that you have read it, and
+that the package is made here from the text you read.
+
+The checker has refused what it can: anything that is not one
+script-only stack, a name or a handler that is somebody else's, native
+code, other programs, script fetched from an address. Before merging:
+
+- **Read the whole script**, on the pull request. It is one text file.
+  If it is too long or too tangled to read, that is a reason to say no.
+- **Read the checker's notes.** "Handles messages that the engine
+  sends" means the library sees those messages from every stack once it
+  is loaded: check that each such handler passes the message on and
+  does only what the description says. `do`, `send`, `value` and
+  `set the script` build script while it runs: look at what is built.
+- **See where it sends things.** "Uses the internet" and "Opens or
+  saves files" each list their lines. A library has the user's own
+  rights there, on their own computer.
+- **Look at the names.** A short prefix on every handler, and a name on
+  the first line that is the author's own.
+- **Try the demo**, if there is one, in the Stack Player. The demo is a
+  stack and goes through the stack review too. `tools/tests`
+  (`test_a_demo_carries_its_library_word_for_word`) holds a demo to the
+  library it is listed with.
+- **The licence** is one the author can give, and one of the listed
+  ones.
+
+A library that came on the forum as a bare file: make the folder
+`libraries/<name>/<version>/` yourself, with the file and a
+`listing.json`, and open a pull request. Never load the library in your
+IDE to "have a look".
+
+The site's `libraries.json` is the list the IDE reads. It is signed
+with the same key as `index.json`, in the same job, and `index.json`
+itself holds no library: IDEs that were released before libraries came
+read it as they always did.
+
 ## Where the gallery may live
 
 Never on an address shared with something a visitor is signed in to, or

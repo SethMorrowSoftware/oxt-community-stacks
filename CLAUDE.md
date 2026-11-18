@@ -1,7 +1,8 @@
 # CLAUDE.md - OXT Community Stacks
 
-Stacks that strangers share, the checker that reads them, and the
-builder of the gallery that plays them. Read [README.md](README.md) and
+Stacks and script libraries that strangers share, the checker that
+reads them, and the builder of the gallery that plays the stacks and
+hands out the libraries. Read [README.md](README.md) and
 [docs/MAINTAINING.md](docs/MAINTAINING.md) first.
 
 The stacks here are other people's programs. Every rule below exists so
@@ -38,6 +39,17 @@ that a stack, or a pull request, can never do more than its box allows.
 7. **The scanner fails closed.** What it cannot read (a password, a
    dump that does not parse, an engine that would not start) is a
    refusal or an error, never a pass.
+8. **A library has no box, so it is never anything but text that was
+   read.** A script library (`libraries/`) is installed into people's
+   IDEs and runs as their own scripts do; nothing on the site runs one.
+   It must be one script-only stack, with a name and handlers that are
+   nobody else's, and the package people install is made by
+   `tools/build_site.py` from the checked text (`scan.library_package`),
+   never taken from the author. The list the IDE installs from,
+   `libraries.json`, is signed like `index.json`, which itself must
+   stay what released IDEs read. Compiled extensions (`.lcm`) and
+   native code are refused: do not add a way to list them without
+   asking first.
 
 ## Working here
 
