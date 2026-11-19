@@ -6,7 +6,8 @@
 #   build   reads every stack again with the scanner (whatever checked it
 #           before), builds the site and plays every stack in a browser.
 #           It holds no secret and may write nothing.
-#   sign    signs the list of stacks (index.json) for the IDE's gallery.
+#   sign    signs the list of stacks (index.json) and the list of libraries
+#           (libraries.json) for the IDE.
 #           It is the only job that sees the signing key; it starts from a
 #           fresh copy of the tools, reads no stack and runs no browser.
 #   deploy  hands the site to GitHub Pages.
@@ -121,10 +122,11 @@ jobs:
           mkdir "$RUNNER_TEMP/site"
           tar -C "$RUNNER_TEMP/site" --no-same-owner --no-same-permissions -xf "$RUNNER_TEMP/in/site.tar"
           # (never a signature that this job did not make)
-          rm -f "$RUNNER_TEMP/site/index.sig"
+          rm -f "$RUNNER_TEMP/site/index.sig" "$RUNNER_TEMP/site/libraries.sig"
           test -f "$RUNNER_TEMP/site/index.json"
+          test -f "$RUNNER_TEMP/site/libraries.json"
 
-      - name: Sign index.json
+      - name: Sign index.json and libraries.json
         env:
           STACKS_SIGNING_KEY: ${{ secrets.STACKS_SIGNING_KEY }}
         run: |
@@ -134,12 +136,14 @@ jobs:
             exit 0
           fi
           python3 tools/sign.py sign "$RUNNER_TEMP/site/index.json" "$RUNNER_TEMP/site/index.sig"
+          python3 tools/sign.py sign "$RUNNER_TEMP/site/libraries.json" "$RUNNER_TEMP/site/libraries.sig"
 
       - name: Check the signature with the public key
         run: |
           set -euo pipefail
           if [ -f "$RUNNER_TEMP/site/index.sig" ]; then
             python3 tools/sign.py verify "$RUNNER_TEMP/site/index.json" "$RUNNER_TEMP/site/index.sig"
+            python3 tools/sign.py verify "$RUNNER_TEMP/site/libraries.json" "$RUNNER_TEMP/site/libraries.sig"
           fi
 
       - name: Hand the site to GitHub Pages

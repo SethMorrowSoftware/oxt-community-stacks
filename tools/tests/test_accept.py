@@ -55,11 +55,11 @@ class Plans(unittest.TestCase):
         self.assertIn(words, str(caught.exception))
 
     def test_a_good_package(self):
-        slug, version, files = self.plan([
+        (top, slug, version), files = self.plan([
             ('stacks/', b''), ('stacks/beat-box/', b''), ('stacks/beat-box/1.2/', b''),
             ('stacks/beat-box/1.2/listing.json', b'{}'), ('stacks/beat-box/1.2/Beat Box.oxtstack', b'x'),
             ('stacks/beat-box/1.2/art/drum.png', b'y')])
-        self.assertEqual((slug, version), ('beat-box', '1.2'))
+        self.assertEqual((top, slug, version), ('stacks', 'beat-box', '1.2'))
         self.assertEqual([rel for _, rel in files], ['listing.json', 'Beat Box.oxtstack', 'art/drum.png'])
 
     def test_paths_that_leave_the_folder(self):

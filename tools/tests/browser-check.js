@@ -14,6 +14,9 @@
 //     "null", the browser's word for a page boxed in on its own;
 //   - the player's page opened on its own, outside a frame, goes back to
 //     the gallery and plays nothing;
+//   - every library of libraries.json is on the libraries page, its
+//     package is there to download, its page plays nothing, and a demo
+//     it names is one of the gallery's stacks;
 //   - with --hostile, the stack of that name (tools/tests/test_browser.py
 //     makes it) runs JavaScript that tries to read the page around it,
 //     the site's storage, cookies and database, and to send the page
@@ -117,6 +120,26 @@ async function play(browser, base, slug, waitFor) {
           'and its button is the one pressed');
         await page.click('.chip[data-tag=""]');
         result((await shown()) === index.stacks.length, 'All shows them all again');
+      }
+    }
+
+    // the libraries: each is listed, its package is there to download,
+    // and a demo it names is a stack that plays here (below, with the
+    // rest). Nothing of a library runs on this site.
+    const libraries = await (await page.goto(base + 'libraries.json')).json();
+    await page.goto(base + 'libraries.html');
+    result((await page.locator('#libs .card').count()) === libraries.libraries.length,
+      'the libraries page shows ' + libraries.libraries.length + ' librar(ies)');
+    for (const lib of libraries.libraries) {
+      const got = await page.request.get(base + lib.download);
+      const head = got.ok() ? (await got.body()).slice(0, 2).toString() : '';
+      result(head === 'PK', lib.slug + ': the library\'s package is there to download');
+      await page.goto(base + lib.page);
+      result((await page.locator('iframe').count()) === 0, lib.slug + ': its page plays nothing');
+      if (lib.demo) {
+        result(index.stacks.some(s => s.slug === lib.demo), lib.slug + ': its demo, ' + lib.demo + ', is a stack of the gallery');
+        result((await page.locator('a.play[href$="s/' + lib.demo + '/play.html"]').count()) === 1,
+          lib.slug + ': its page leads to the demo');
       }
     }
     await page.close();

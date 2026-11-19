@@ -1,5 +1,6 @@
-# Reads the stacks a pull request shares and says, on the pull request and
-# in plain words, whether they can be shared and what they use.
+# Reads the stacks and the script libraries a pull request shares and says,
+# on the pull request and in plain words, whether they can be shared and
+# what they use.
 #
 # HOW THIS IS KEPT SAFE. A pull request comes from anybody, and this
 # workflow may write a comment, so:
@@ -9,12 +10,13 @@
 #     the pull request is ever executed: not a script, not a hook, not a
 #     build step.
 #   - The pull request's files are fetched into a folder of their own as
-#     DATA, only the stacks/ folder, with symbolic links written out as
-#     plain text files.
+#     DATA, only the stacks/ and libraries/ folders, with symbolic links
+#     written out as plain text files.
 #   - A stack is read by OXT-Beyond's engine with every permission taken
 #     away, as the user "nobody", with no network and no way to become
 #     anyone else (tools/scan.py says how); reading a stack runs none of
-#     its handlers.
+#     its handlers. A library is a script-only stack and is read the same
+#     way: it is never loaded, and none of it runs.
 #   - The job that reads has a read-only token. The job that comments has
 #     the right to comment and does nothing but post the report, a file
 #     that the reading job wrote with every outside word escaped.
@@ -59,7 +61,7 @@ jobs:
             --jq '.[] | {filename, status, previous_filename}' | jq -s . > "$RUNNER_TEMP/changed.json"
           echo "$(jq length "$RUNNER_TEMP/changed.json") changed file(s)"
 
-      - name: Get the pull request's stacks, as files to read
+      - name: Get the pull request's stacks and libraries, as files to read
         env:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR: ${{ github.event.pull_request.number }}
@@ -73,8 +75,8 @@ jobs:
           git config core.hooksPath /dev/null
           git config core.autocrlf false
           git remote add origin "https://github.com/$GITHUB_REPOSITORY"
-          git sparse-checkout set --no-cone '/stacks/'
-          # (only the files of stacks/ are downloaded)
+          git sparse-checkout set --no-cone '/stacks/' '/libraries/'
+          # (only the files of stacks/ and libraries/ are downloaded)
           git fetch --quiet --depth 1 --no-tags --filter=blob:none origin "refs/pull/$PR/head"
           # (the pull request may have moved on since this run began; the
           # newer push has a run of its own)
@@ -95,7 +97,7 @@ jobs:
           sudo install -d -o "$(id -u)" -g "$(id -g)" -m 755 /opt/oxt
           echo "OXT_ENGINE=$(python3 tools/fetch.py engine /opt/oxt)" >> "$GITHUB_ENV"
 
-      - name: Read the stacks
+      - name: Read the stacks and the libraries
         env:
           COUNT: ${{ github.event.pull_request.changed_files }}
         run: |

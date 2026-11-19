@@ -58,8 +58,9 @@ class Refused(Exception):
 
 
 def plan(archive):
-    """(slug, version, [(ZipInfo, relative path)]) for an open ZipFile
-    whose every entry is in order. Raises Refused."""
+    """((top folder, slug, version), [(ZipInfo, relative path)]) for an
+    open ZipFile whose every entry is in order; the top folder is
+    "stacks" or "libraries". Raises Refused."""
     infos = archive.infolist()
     if not infos:
         raise Refused('The package is empty.')
@@ -82,15 +83,15 @@ def plan(archive):
             raise Refused('The package has a link or a special file: %r.' % name)
         if info.flag_bits & 0x1:
             raise Refused('The package is locked with a password.')
-        if parts[0] != 'stacks' or (len(parts) < 4 and not is_dir):
-            raise Refused('Everything in the package must be inside one folder, stacks/<name>/<version>/. '
-                          'This is not: %r.' % name)
+        if parts[0] not in listing_rules.KINDS or (len(parts) < 4 and not is_dir):
+            raise Refused('Everything in the package must be inside one folder, stacks/<name>/<version>/ '
+                          'or libraries/<name>/<version>/. This is not: %r.' % name)
         if len(parts) >= 3:
             if where is None:
-                where = (parts[1], parts[2])
-            elif where != (parts[1], parts[2]):
-                raise Refused('The package holds more than one stack folder: %s/%s and %s/%s.'
-                              % (where + (parts[1], parts[2])))
+                where = (parts[0], parts[1], parts[2])
+            elif where != (parts[0], parts[1], parts[2]):
+                raise Refused('The package holds more than one stack folder: %s/%s/%s and %s/%s/%s.'
+                              % (where + (parts[0], parts[1], parts[2])))
         key = name.rstrip('/').lower()
         if key in seen:
             raise Refused('The package has the same name twice: %r.' % name)
@@ -103,11 +104,12 @@ def plan(archive):
                           % (scan.MAX_FILE_BYTES // 1048576, scan.MAX_TOTAL_BYTES // 1048576))
         files.append((info, '/'.join(parts[3:])))
     if where is None or not files:
-        raise Refused('The package has no stack folder, stacks/<name>/<version>/.')
-    problems = listing_rules.check_path(*where)
+        raise Refused('The package has no stack folder, stacks/<name>/<version>/, and no library '
+                      'folder, libraries/<name>/<version>/.')
+    problems = listing_rules.check_path(where[1], where[2], listing_rules.KINDS[where[0]])
     if problems:
         raise Refused(' '.join(problems))
-    return where[0], where[1], files
+    return where, files
 
 
 def unpack(archive, files, folder):
@@ -149,18 +151,21 @@ def accept(package, engine, stacks_dir=None, no_network=False):
     try:
         with archive:
             try:
-                slug, version, files = plan(archive)
-                final = os.path.join(stacks_dir, slug, version)
+                (top, slug, version), files = plan(archive)
+                kind = listing_rules.KINDS[top]
+                # (libraries/ stands beside stacks/)
+                base = stacks_dir if top == 'stacks' else os.path.join(os.path.dirname(stacks_dir), top)
+                final = os.path.join(base, slug, version)
                 if os.path.lexists(final):
                     raise Refused('Version %s of "%s" is already here. A published version is never changed: '
                                   'share the changes as a higher version.' % (version, slug))
-                before = [v for v in (os.listdir(os.path.join(stacks_dir, slug))
-                                      if os.path.isdir(os.path.join(stacks_dir, slug)) else [])
+                before = [v for v in (os.listdir(os.path.join(base, slug))
+                                      if os.path.isdir(os.path.join(base, slug)) else [])
                           if listing_rules.VERSION.match(v)]
                 if any(listing_rules.version_key(version) <= listing_rules.version_key(v) for v in before):
                     raise Refused('The version must be higher than %s, the newest one of "%s" here.'
                                   % (max(before, key=listing_rules.version_key), slug))
-                folder = os.path.join(work, 'stacks', slug, version)
+                folder = os.path.join(work, top, slug, version)
                 os.makedirs(folder)
                 unpack(archive, files, folder)
             except Refused as e:
@@ -168,7 +173,10 @@ def accept(package, engine, stacks_dir=None, no_network=False):
             except (OSError, zipfile.BadZipFile, RuntimeError, NotImplementedError, EOFError, ValueError):
                 # (zipfile's own words for a damaged or unusual package)
                 return False, '**The package was not accepted.** It is damaged, or packed in a way that cannot be read.\n'
-        report = scan.scan_folder(folder, engine, no_network)
+        taken = names = None
+        if kind == 'library':
+            taken, names = scan.library_names(base, skip=slug)
+        report = scan.scan_folder(folder, engine, no_network, kind=kind, taken=taken, names=names)
         text = scan.markdown(report)
         if not report['ok']:
             return False, text + '\n**The package was not accepted**, and nothing was added.\n'
@@ -176,10 +184,10 @@ def accept(package, engine, stacks_dir=None, no_network=False):
         shutil.move(folder, final)
         note = ''
         if before:
-            note = ('\nFor the reviewer: this is a new version of a stack that is already here. '
-                    'Check that it comes from the same author.\n')
-        return True, text + note + '\n**Accepted** into `stacks/%s/%s/`. Open a pull request with that folder.\n' % (
-            slug, version)
+            note = ('\nFor the reviewer: this is a new version of a %s that is already here. '
+                    'Check that it comes from the same author.\n' % kind)
+        return True, text + note + '\n**Accepted** into `%s/%s/%s/`. Open a pull request with that folder.\n' % (
+            top, slug, version)
     finally:
         shutil.rmtree(work, ignore_errors=True)
 

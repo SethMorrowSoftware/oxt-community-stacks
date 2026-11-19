@@ -210,3 +210,9 @@ details>summary{cursor:pointer;font-weight:700}
 .inshort{margin:1.2rem 0 .4rem;padding:.9rem 1.2rem 1.1rem;background:var(--panel);border:1px solid var(--line);
   border-left:4px solid var(--accent);border-radius:0 14px 14px 0}
 .inshort p{margin:0}
+
+/* libraries: a card with no picture and no Play, and a page with no box */
+.cards.libs{margin-top:1.2rem}
+.card.lib{padding-top:1.1rem}
+.library .intro{margin-bottom:1.6rem}
+.library .lines code{white-space:pre-wrap;word-break:break-word}

@@ -27,8 +27,8 @@ class Classify(unittest.TestCase):
             {'filename': 'stacks/c/1/new.oxtstack', 'status': 'renamed', 'previous_filename': 'stacks/d/1/old.oxtstack'},
             {'filename': 'tools/scan.py', 'status': 'modified'}]
         shared, removed, other = pr_scan.classify(changed)
-        self.assertEqual(shared, {('a', '1.0'), ('c', '1')})
-        self.assertEqual(removed, {('b', '2'), ('d', '1')})
+        self.assertEqual(shared, {('stacks', 'a', '1.0'), ('stacks', 'c', '1')})
+        self.assertEqual(removed, {('stacks', 'b', '2'), ('stacks', 'd', '1')})
         self.assertEqual(other, ['README.md', 'stacks/a/loose.txt', 'stacks/note.txt', 'tools/scan.py'])
 
 
