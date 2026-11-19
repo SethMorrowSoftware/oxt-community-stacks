@@ -790,6 +790,8 @@ class Site(unittest.TestCase):
         self.assertIn('Read the script', page)
         self.assertIn('alpha-1.10.lce', page)
         self.assertIn('Extension Manager', page)
+        # the IDE's own way to install it (File > Community Stacks..., Libraries)
+        self.assertIn('<b>File &gt; Community Stacks...</b>: choose <b>Libraries</b>', page)
         self.assertIn('Uses the internet', page)
         self.assertIn('Listens to every stack', page)
         self.assertIn('<code>openCard</code>', page)

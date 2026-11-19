@@ -772,6 +772,7 @@ def library_page(e):
       <ul class="plain">%(meanings)s</ul>
       <h2>Install it in OXT-Beyond</h2>
       <p class="note">An installed library runs on your computer as any program does, every time OXT-Beyond starts, and in every program you build with it. There is no box around it. <a href="%(root)s%(source)s">Read the script</a> first, and install libraries only from people you trust.</p>
+      <p>In OXT-Beyond 0.2.8-dp.2 and later, the easy way is <b>File &gt; Community Stacks...</b>: choose <b>Libraries</b>, pick this one and press <b>Install</b>. It checks the file against this site's signed list before it installs it. Or by hand:</p>
       <ol class="three">
         <li><a class="ghost" href="%(root)s%(download)s" download>Download it (%(size)s)</a> Leave the file as it is: do not unzip it.</li>
         <li>In <a href="%(oxt)s">OXT-Beyond</a>, choose <b>Tools &gt; Extension Manager</b>, click <b>+</b> and choose the file.</li>
