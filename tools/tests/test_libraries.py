@@ -862,8 +862,9 @@ class Repository(unittest.TestCase):
     def test_every_library_here_can_be_shared(self):
         fixtures.need_engine(self)
         libraries = os.path.join(os.path.dirname(TOOLS), 'libraries')
-        found = build_site.find_versions(libraries)
-        self.assertTrue(found, 'there is no library in libraries/')
+        found = build_site.find_versions(libraries) if os.path.isdir(libraries) else []
+        # (a gallery may have no library yet: the first is shared in a pull
+        # request of its own, which the checker reads with these tools)
         collected, refused = build_site.collect_libraries(libraries, fixtures.ENGINE, log=lambda line: None)
         self.assertEqual([(slug, version, report['problems']) for slug, version, report in refused], [])
         self.assertEqual(sorted(collected), sorted({slug for slug, _, _ in found}))
@@ -874,6 +875,8 @@ class Repository(unittest.TestCase):
         else than what people install."""
         root = os.path.dirname(TOOLS)
         libraries = os.path.join(root, 'libraries')
+        if not os.path.isdir(libraries):
+            return
         for slug, version, folder in build_site.find_versions(libraries):
             with open(os.path.join(folder, 'listing.json'), encoding='utf-8') as f:
                 data = json.load(f)
