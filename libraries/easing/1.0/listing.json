@@ -1,0 +1,9 @@
+{
+  "title": "Easing",
+  "author": "OXT-Beyond contributors",
+  "description": "Curves for smooth movement: slow starts, gentle stops, a bounce, an elastic snap. Give ezBetween a start, an end and how far through the time you are, and it answers with the point, the size or the colour for that moment.",
+  "licence": "MIT",
+  "main": "easing.livecodescript",
+  "demo": "easing-demo",
+  "tags": ["animation", "motion"]
+}
