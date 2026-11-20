@@ -115,6 +115,24 @@ class Listing(unittest.TestCase):
         self.assertIsNone(problems(tags='game')[0])
         self.assertIsNone(problems(tags=['<i>'])[0])
 
+    def test_fill(self):
+        # a stack may ask to be scaled to fill the window it plays in
+        self.assertIs(problems(fill=True)[0]['fill'], True)
+        self.assertIs(problems(fill=False)[0]['fill'], False)
+        self.assertNotIn('fill', problems()[0])
+        for value in ('yes', 'true', 1, 0, [], {}):
+            with self.subTest(value=value):
+                out, found = problems(fill=value)
+                self.assertIsNone(out)
+                self.assertEqual(len(found), 1)
+                self.assertIn('"fill"', found[0])
+        # a library has no window to fill
+        library = dict(GOOD, licence='MIT', main='easing.livecodescript', fill=True)
+        library.pop('screenshot')
+        out, found = listing.check(library, {'easing.livecodescript', 'listing.json'}, 'library')
+        self.assertIsNone(out)
+        self.assertIn('listing.json has "fill", which is not one of its fields.', found)
+
     def test_not_an_object(self):
         self.assertIsNone(listing.check(['x'], PATHS)[0])
 

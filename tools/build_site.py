@@ -528,9 +528,14 @@ def human_size(size):
 
 
 def play_page(e):
-    """The page a stack plays on: a slim bar, and the player in its box."""
+    """The page a stack plays on: a slim bar, and the player in its box.
+    A stack whose listing asks to fill the window ("fill": true) is
+    scaled by the player to fill its frame (the player's ?fill=yes); any
+    other plays at its own size, in the middle."""
     root = '../../'
     frame = '%splayer/play/index.html?stack=%s' % (root, urllib.parse.quote('../../' + e['download'], safe='/.'))
+    if e.get('_dev', {}).get('fill'):
+        frame += '&fill=yes'
     return '''<!doctype html>
 <html lang="en">
 <head>
@@ -866,7 +871,8 @@ def entry_of(slug, versions):
              'versions': [],
              # (for the pages only, not the index the IDE reads)
              '_dev': {'stacks': latest['stacks'], 'findings': latest.get('findings', []),
-                      'notes': latest['notes'], 'sources': latest.get('_sources', [])}}
+                      'notes': latest['notes'], 'sources': latest.get('_sources', []),
+                      'fill': listing.get('fill') is True}}
     for report in versions:
         base = 's/%s/%s/' % (slug, report['version'])
         entry['versions'].append({

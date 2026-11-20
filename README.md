@@ -84,6 +84,7 @@ stacks/
 | `main` | The file name of the stack to open. |
 | `screenshot` | Optional. The file name of a picture in the folder. |
 | `tags` | Optional. Up to five short lower-case words. |
+| `fill` | Optional. `true` for a stack laid out for a big screen, such as a studio or an editor: it is scaled to fill the window it plays in, as big as fits, and fitted again when the window changes size. Left out, the stack plays at its own size, in the middle. |
 
 You do not say what your stack uses (the internet, files). The checker
 reads that from the scripts, so a listing cannot say less than the stack
