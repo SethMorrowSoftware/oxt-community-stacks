@@ -1,0 +1,14 @@
+{
+  "title": "Beyond Beats",
+  "author": "OXT-Beyond contributors",
+  "description": "A beat studio in the browser. Lay down drums in the channel rack, write bass lines and chords in the piano roll, arrange patterns into a song in the playlist, and mix it with reverb, delay and a fader for every channel. Sixteen drums and five synths are made by the browser as it plays, and you can load samples of your own. Save your song as a file and export it as a WAV.",
+  "licence": "GPL-3.0-only",
+  "main": "Beyond Beats.oxtstack",
+  "screenshot": "screenshot.webp",
+  "tags": [
+    "music",
+    "sound",
+    "studio"
+  ],
+  "fill": true
+}
