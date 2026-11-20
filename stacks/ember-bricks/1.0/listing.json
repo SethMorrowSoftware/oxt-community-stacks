@@ -1,0 +1,15 @@
+{
+  "title": "Ember Bricks",
+  "author": "OXT-Beyond contributors",
+  "description": "A brick breaker for a phone, a tablet or a desktop. Every brick you break heats the ball, and a hot ball scores up to five times as much. Catch the sparks that fall (a wide paddle, more balls, a fireball, bolts, a net) and let the dark ones drop. Twenty-four levels that come round again faster, and an Online Duel for two over the internet: meet in the lobby or swap two codes, each on your own wall, and a hot streak sends your rival trouble.",
+  "licence": "GPL-3.0-only",
+  "main": "Ember Bricks.oxtstack",
+  "screenshot": "screenshot.webp",
+  "tags": [
+    "game",
+    "phone",
+    "touch",
+    "multiplayer"
+  ],
+  "fill": true
+}
