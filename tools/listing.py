@@ -8,8 +8,9 @@
       "licence": "GPL-3.0-only",
       "main": "Beat Box.oxtstack",
       "screenshot": "screenshot.png",        (optional)
-      "tags": ["music", "game"]              (optional, at most five)
-    }
+      "tags": ["music", "game"],             (optional, at most five)
+      "fill": true                           (optional: scaled to fill the
+    }                                         window it plays in)
 
 The folder says the rest: stacks/<name>/<version>/. What the stack uses
 (the internet, files) is not written here: the scanner reads it from the
@@ -128,7 +129,7 @@ def check(data, paths, kind='stack'):
     problems = []
     if not isinstance(data, dict):
         return None, ['listing.json must be one { ... } object.']
-    optional = OPTIONAL + (('demo',) if kind == 'library' else ())
+    optional = OPTIONAL + (('demo',) if kind == 'library' else ('fill',))
     for key in data:
         if key not in REQUIRED + optional:
             problems.append('listing.json has "%s", which is not one of its fields.' % key)
@@ -173,6 +174,16 @@ def check(data, paths, kind='stack'):
                             'in the folder.')
         else:
             out['screenshot'] = shot
+    # A stack laid out for a big screen (a studio, an editor) asks to be
+    # scaled to fill the window it plays in, as big as fits, and fitted
+    # again when the window changes size; any other plays at its own
+    # size, in the middle, as it always did. A library has no window.
+    if 'fill' in data and kind != 'library':
+        if not isinstance(data['fill'], bool):
+            problems.append('"fill" must be true (the stack is scaled to fill the window it plays in) '
+                            'or false.')
+        else:
+            out['fill'] = data['fill']
     tags = data.get('tags', [])
     if not isinstance(tags, list) or len(tags) > 5 or not all(
             isinstance(t, str) and TAG.match(t) and len(t) <= 20 for t in tags):

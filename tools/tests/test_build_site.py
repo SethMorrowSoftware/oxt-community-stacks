@@ -57,6 +57,8 @@ class Site(unittest.TestCase):
                              file='Tricky.oxtstack', name='Tricky',
                              listing={'author': "O'Neil & Co", 'tags': ['game']},
                              script=fixtures.CLEAN_SCRIPT)
+        fixtures.make_folder(cls.root, slug='studio', title='Studio', listing={'fill': True},
+                             script=fixtures.CLEAN_SCRIPT)
         fixtures.make_folder(cls.root, slug='refused', title='Refused',
                              script='on a\n   get shell("x")\nend a')
         folder = fixtures.make_folder(cls.root, slug='notpicture', title='Not Picture',
@@ -103,7 +105,7 @@ class Site(unittest.TestCase):
         self.assertTrue(any('refused 1.0 is left out' in line for line in self.log))
         self.assertFalse(any(path.startswith('s/refused/') for path in self.all_files()))
         self.assertNotIn('Refused', self.read('index.html'))
-        self.assertEqual([s['slug'] for s in self.index['stacks']], ['alpha', 'notpicture', 'tricky'])
+        self.assertEqual([s['slug'] for s in self.index['stacks']], ['alpha', 'notpicture', 'studio', 'tricky'])
 
     def test_strict_fails_on_a_refused_stack(self):
         with self.assertRaises(build_site.BuildError):
@@ -176,6 +178,19 @@ class Site(unittest.TestCase):
         self.assertNotIn('allow-top-navigation', sandbox)
         self.assertNotIn('allow-top-navigation-by-user-activation', sandbox)
         self.assertIn('src="../../player/play/index.html?stack=../../s/alpha/1.10/alpha-1.10.zip"', frames[0])
+
+    def test_a_stack_that_asks_fills_its_frame(self):
+        # "fill": true in its listing: the player scales it to the frame
+        frame = re.findall(r'<iframe[^>]*>', self.read('s/studio/play.html'))[0]
+        self.assertIn('src="../../player/play/index.html?stack=../../s/studio/1.0/studio-1.0.zip&amp;fill=yes"',
+                      frame)
+        self.assertNotIn('allow-same-origin', frame)
+        # any other plays at its own size, as before
+        for slug in ('alpha', 'tricky'):
+            self.assertNotIn('fill=', self.read('s/%s/play.html' % slug))
+        # and the index the IDE reads keeps its shape
+        for entry in json.loads(self.read('index.json'))['stacks']:
+            self.assertNotIn('fill', entry)
 
     def test_no_page_but_the_play_page_has_a_frame(self):
         for path in self.all_files():
@@ -274,7 +289,7 @@ class Site(unittest.TestCase):
     def test_the_gallery_can_be_narrowed_by_words_and_tags(self):
         text = self.read('index.html')
         self.assertIn('data-tags="game"', text)
-        self.assertIn('id="count" role="status" aria-live="polite">3 stacks<', text)
+        self.assertIn('id="count" role="status" aria-live="polite">4 stacks<', text)
         # one stack has the tag "game": too few for a button of its own,
         # but its page still links to the gallery showing only it
         self.assertNotIn('data-tag="game"', text)
