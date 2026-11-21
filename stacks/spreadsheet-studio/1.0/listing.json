@@ -1,0 +1,9 @@
+{
+  "title": "Spreadsheet Studio",
+  "author": "OXT-Beyond contributors",
+  "description": "Make real Excel files in your browser and read them back. Type a table, pick fonts and colours, add formulas, dates, charts and a picture, then download the .xlsx. Open any .xlsx to look inside it.",
+  "licence": "GPL-3.0-only",
+  "main": "Spreadsheet Studio.oxtstack",
+  "screenshot": "screenshot.png",
+  "tags": ["spreadsheet", "excel", "tool"]
+}
